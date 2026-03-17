@@ -33,7 +33,7 @@ RAG 파이프라인으로 검색·분석하여 자연어 질의에 정확한 답
 - **FAQ 자동 생성**: 최근 30일 질문을 Gemini로 그룹핑하여 FAQ 카드 생성
 - **이용통계 대시보드**: 일별/시간대별 질문 수, TOP 10 참조 문서
 - **사용자 프로필**: 학과/학년 정보로 개인화된 답변 제공
-- **공지사항 크롤링**: 인덱싱된 공지사항 문서 목록 조회
+- **공지사항 자동 크롤링**: Playwright Java로 소융대 공지 크롤링 → Gemini LLM 유효성 판단 → PDF 변환 → 청킹 → RDB 저장
 
 ---
 
@@ -53,7 +53,8 @@ RAG 파이프라인으로 검색·분석하여 자연어 질의에 정확한 답
 | **인증** | Google OAuth 2.0 + JWT (jjwt) | 0.12.5 | 사용자 인증 |
 | **보안** | Spring Security | 6.x | CSRF 비활성화, Stateless 세션 |
 | **HTTP Client** | Spring WebFlux (WebClient) | 6.x | 외부 API 비동기 호출 (Gemini, Cohere, Qdrant) |
-| **PDF 파싱** | Apache PDFBox | 3.0.1 | PDF → 텍스트 추출 |
+| **PDF 파싱** | Apache PDFBox | 3.0.1 | PDF → 텍스트 추출, 공지 본문 PDF 변환 |
+| **크롤링** | Playwright Java | 1.49.0 | 헤드리스 Chromium 기반 SPA 크롤링 |
 | **CORS** | Spring WebMvcConfigurer | - | 프론트엔드 크로스 오리진 허용 |
 | **컨테이너** | Docker + Docker Compose | - | 배포 및 로컬 실행 |
 
@@ -67,6 +68,7 @@ RAG 파이프라인으로 검색·분석하여 자연어 질의에 정확한 답
 - **`@Transactional`**: `SearchService`의 인덱싱/삭제 작업에서 SQLite + Qdrant 일관성 보장
 - **`@EnableScheduling`**: 스케줄링 기능 활성화 (공지사항 자동 크롤링 확장 가능)
 - **Multipart File Upload**: `MultipartFile`로 최대 500MB PDF 업로드 처리
+- **Playwright Java**: Headless Chromium 기반 SPA 크롤링 (JavaScript 렌더링 필요한 공지사항 사이트)
 - **Lombok**: `@Data`, `@Builder`, `@RequiredArgsConstructor` 등으로 보일러플레이트 코드 제거
 
 ---
@@ -99,6 +101,11 @@ RAG 파이프라인으로 검색·분석하여 자연어 질의에 정확한 답
 │  │       │         → CohereRerankService (리랭킹)       │      │
 │  │       ▼                                             │     │
 │  │  AnswerService ─→ GeminiService (답변 생성)           │     │
+│  │                                                     │     │
+│  │  NoticeCrawlerService ─→ Playwright (Chromium)      │     │
+│  │       │                → GeminiService (유효성 판단)   │     │
+│  │       │                → PDFBox (PDF 생성/병합)       │      │
+│  │       ▼                → ChunkerService (청킹)       │      │
 │  │                                                     │     │
 │  │  PdfParserService (PDF → 텍스트)                     │      │
 │  │  ChunkerService (텍스트 → 청크 분할)                    │     │
@@ -157,6 +164,8 @@ backend/
 ├── Dockerfile                            # 멀티스테이지 Docker 빌드
 ├── docker-compose.yml                    # Qdrant + App 컨테이너 구성
 ├── .env.example                          # 환경변수 템플릿
+├── crawled_notices/                      # 크롤링된 공지 PDF 저장 디렉토리
+│   └── pdf/                              # 공지별 PDF 파일
 └── src/main/
     ├── java/com/kdd/
     │   ├── KddApplication.java           # @SpringBootApplication 메인 클래스
@@ -203,10 +212,15 @@ backend/
     │       ├── QdrantService.java        # Qdrant REST API (upsert/search/delete)
     │       ├── CohereRerankService.java  # Cohere Rerank API 호출
     │       ├── PdfParserService.java     # PDFBox로 PDF → 페이지별 텍스트
-    │       └── ChunkerService.java       # 텍스트 → 고정 크기 청크 분할
+    │       ├── ChunkerService.java       # 텍스트 → 고정 크기 청크 분할
+    │       └── NoticeCrawlerService.java # 소융대 공지 크롤링 (Playwright + Gemini 필터)
     │
     └── resources/
-        └── application.yml               # Spring Boot 설정 파일
+        ├── application.yml               # Spring Boot 설정 파일
+        ├── fonts/
+        │   └── NanumGothic.ttf           # 한글 폰트 (PDF 생성용)
+        └── static/
+            └── api_test.html             # API 테스트 페이지
 ```
 
 ---
@@ -269,7 +283,22 @@ cd backend
 docker-compose up -d qdrant
 ```
 
-### Step 6: IntelliJ Run Configuration 설정
+### Step 6: Playwright Chromium 설치
+
+공지사항 크롤링 기능에 Playwright Java가 필요합니다. 최초 1회 Chromium 브라우저를 설치해야 합니다:
+
+```bash
+# Gradle 의존성 설치 후 Playwright CLI로 Chromium 설치
+cd backend
+./gradlew dependencies  # 의존성 다운로드
+npx playwright install chromium
+# 또는 Maven 경로에서 직접 실행
+java -cp "$(find ~/.gradle -name 'playwright-*.jar' | head -1)" com.microsoft.playwright.CLI install chromium
+```
+
+설치된 Chromium 경로: `~/Library/Caches/ms-playwright/chromium-*` (macOS 기준)
+
+### Step 7: IntelliJ Run Configuration 설정
 
 1. 우측 상단 `Edit Configurations...` 클릭
 2. `+` → `Spring Boot` 선택
@@ -281,7 +310,7 @@ docker-compose up -d qdrant
    - 또는 **EnvFile 플러그인** 설치 후 `.env` 파일 경로 지정
 4. `Apply` → `OK`
 
-### Step 7: 실행 및 테스트
+### Step 8: 실행 및 테스트
 
 1. `KddApplication.java` 파일 열기
 2. `main` 메서드 옆 ▶️ 버튼 클릭 또는 `Shift + F10`
@@ -484,6 +513,34 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 **Response 401 Unauthorized:**
 ```json
 { "detail": "Unauthorized" }
+```
+
+---
+
+#### `GET /auth/dev-token` — 개발용 JWT 발급
+
+개발/테스트 환경에서 Google 로그인 없이 JWT를 발급받을 수 있습니다.
+
+| 항목 | 값 |
+|------|-----|
+| Method | GET |
+| URL | `/auth/dev-token?email={email}&name={name}` |
+| 인증 | 불필요 |
+
+**Query Parameters:**
+| 파라미터 | 타입 | 기본값 | 설명 |
+|---------|------|--------|------|
+| `email` | string | `22615jin@kookmin.ac.kr` | 발급할 이메일 |
+| `name` | string | `테스트유저` | 사용자 이름 |
+
+**Response 200 OK:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiJ9...",
+  "email": "22615jin@kookmin.ac.kr",
+  "name": "테스트유저",
+  "isDocAdmin": true
+}
 ```
 
 ---
@@ -693,11 +750,79 @@ Qdrant 컬렉션 삭제 + SQLite 전체 삭제 + 컬렉션 재생성
 
 ---
 
-### 4. 공지사항 (Notices)
+### 4. 공지사항 크롤링 (Notices)
+
+#### `POST /crawl/notices` — 소융대 공지사항 크롤링
+
+국민대 소프트웨어융합대학 공지사항 사이트(`https://cs.kookmin.ac.kr/news/notice/`)에서
+최근 N일 이내 공지를 자동 크롤링합니다.
+
+| 항목 | 값 |
+|------|-----|
+| Method | POST |
+| URL | `/crawl/notices?days={N}` |
+| 인증 | Bearer JWT (관리자 전용) |
+
+**Query Parameters:**
+| 파라미터 | 타입 | 기본값 | 설명 |
+|---------|------|--------|------|
+| `days` | int | 7 | 최근 N일 이내 공지만 수집 |
+
+**Response 200 OK:**
+```json
+{
+  "success": 8,
+  "fail": 0,
+  "skipped": 2,
+  "total_chunks": 13,
+  "notices": [
+    {
+      "title": "2026학년도 1학기 조기졸업 신청 안내(3/17~3/20)",
+      "date": "26.03.11",
+      "chunks": 2,
+      "attachments_merged": 0
+    },
+    {
+      "title": "2026학년도 소프트웨어융합대학 멘토링 시스템 재개 안내",
+      "date": "26.03.10",
+      "chunks": 1,
+      "attachments_merged": 1
+    }
+  ],
+  "errors": []
+}
+```
+
+| 필드 | 설명 |
+|------|------|
+| `success` | 성공적으로 크롤링된 공지 수 |
+| `fail` | 크롤링 실패한 공지 수 |
+| `skipped` | Gemini LLM 필터에 의해 제외된 공지 수 (마감 지난 공지 등) |
+| `total_chunks` | 저장된 총 청크 수 |
+| `notices` | 크롤링된 공지 상세 목록 |
+| `attachments_merged` | 병합된 첨부 PDF 수 |
+
+**크롤링 파이프라인:**
+```
+1. Playwright (Headless Chromium)로 공지 목록 페이지 접근
+   └─ SPA(JavaScript 렌더링) 사이트이므로 Jsoup 대신 Playwright 사용
+2. 날짜 필터: 최근 N일 이내 공지만 수집 (고정 공지 포함)
+3. 각 공지 상세 페이지에서 본문 텍스트 수집
+4. Gemini 2.5 Flash로 유효성 판단
+   └─ 마감일 지난 공지, 종료된 행사 등 자동 제외
+   └─ 학사 규정, 장학금, 수강신청 등 유용한 정보는 유지
+5. 유효한 공지만:
+   ├─ PDFBox로 본문 PDF 생성 (NanumGothic 한글 폰트)
+   ├─ 첨부 PDF 다운로드 + 본문 PDF와 병합
+   ├─ crawled_notices/pdf/ 디렉토리에 저장
+   └─ 텍스트 청킹 → document_chunks 테이블에 저장
+```
+
+---
 
 #### `GET /crawl/notices/list` — 인덱싱된 공지사항 목록
 
-`[공지]` 또는 `[공지첨부]` 접두사가 붙은 문서 목록을 반환합니다.
+`[공지]` 접두사가 붙은 문서 목록을 반환합니다.
 
 | 항목 | 값 |
 |------|-----|
@@ -710,8 +835,8 @@ Qdrant 컬렉션 삭제 + SQLite 전체 삭제 + 컬렉션 재생성
 {
   "notices": [
     {
-      "doc_name": "[공지] 2025학년도 1학기 수강신청 안내",
-      "chunk_count": 5,
+      "doc_name": "[공지] 2026학년도 1학기 조기졸업 신청 안내",
+      "chunk_count": 2,
       "source_url": ""
     }
   ]
@@ -1094,3 +1219,55 @@ CREATE TABLE document_chunks (
 ```
 
 > 테이블은 Spring JPA의 `ddl-auto: update` 설정으로 자동 생성됩니다.
+
+### 6. 공지사항 자동 크롤링 (NoticeCrawlerService)
+
+소프트웨어융합대학 공지사항 사이트는 JavaScript SPA로 구현되어 있어
+일반 HTTP 요청(Jsoup)으로는 콘텐츠를 가져올 수 없습니다.
+Playwright Java(Headless Chromium)를 사용하여 브라우저 렌더링 후 데이터를 추출합니다.
+
+**크롤링 전체 흐름:**
+
+```
+Playwright (Headless Chromium)
+    │
+    ▼
+① 공지 목록 페이지 순회 (페이지네이션)
+    │  - 고정 공지(Notice 라벨)와 일반 공지 분리
+    │  - 날짜 파싱: YY.MM.DD 형식 (예: 26.03.11)
+    │  - cutoff 날짜 이전 일반 공지 도달 시 순회 중단
+    ▼
+② 각 공지 상세 페이지 방문 → 본문 텍스트 수집
+    │  - 여러 CSS 셀렉터 시도 (.board-view-content, .view-content 등)
+    │  - 본문 최대 300자를 Gemini에 전달
+    ▼
+③ Gemini 2.5 Flash LLM 필터
+    │  - 오늘 날짜 기준으로 유효성 판단
+    │  - [저장 O]: 학사 규정, 유효한 신청 안내, 제도 변경, 학생 지원
+    │  - [저장 X]: 마감일 지난 공지, 종료된 행사, 빈 본문
+    │  - 응답 형식: "1:O\n2:X\n3:O\n..."
+    ▼
+④ 유효한 공지만 PDF 변환
+    │  - PDFBox + NanumGothic 한글 폰트
+    │  - 제목, 날짜, 작성자, URL, 본문 포함
+    │  - 첨부 PDF 다운로드 후 본문 PDF와 병합
+    │  - crawled_notices/pdf/ 디렉토리에 저장
+    ▼
+⑤ 텍스트 청킹 → RDB 저장
+    │  - ChunkerService로 550자 단위 분할
+    │  - doc_name: "[공지] 제목.pdf"
+    │  - source_url: 원본 공지 URL
+    │  - document_chunks 테이블에 저장
+    ▼
+크롤링 완료 (결과 JSON 반환)
+```
+
+**주요 기술 결정:**
+
+| 결정 | 이유 |
+|------|------|
+| Jsoup 대신 Playwright | 공지 사이트가 JavaScript SPA라서 서버사이드 렌더링 필요 |
+| Gemini LLM 필터 | 키워드 기반 필터링보다 정확한 유효성 판단 (마감일, 행사 종료 등 맥락 이해) |
+| PDFBox로 PDF 생성 | 공지 본문을 PDF로 보존하여 원본 형태 유지 |
+| NanumGothic 폰트 | macOS AppleGothic은 OS/2 테이블 누락으로 PDFBox 호환 불가 |
+| 첨부 PDF 병합 | 공지 본문과 첨부파일을 하나의 PDF로 통합 관리 |

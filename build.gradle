@@ -46,8 +46,14 @@ dependencies {
     // HTML 파싱
     implementation 'org.jsoup:jsoup:1.17.2'
 
+    // 헤드리스 브라우저 (JS 렌더링 필요한 SPA 크롤링)
+    implementation 'com.microsoft.playwright:playwright:1.49.0'
+
     // JSON
     implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // .env 파일 로딩
+    implementation 'me.paulschwarz:spring-dotenv:4.0.0'
 
     // Scheduling
     implementation 'org.springframework.boot:spring-boot-starter-quartz'
