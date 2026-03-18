@@ -12,6 +12,8 @@ public class ChatLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private String sessionId;
+
     @Column(nullable = false, columnDefinition = "TEXT")
     private String question;
 

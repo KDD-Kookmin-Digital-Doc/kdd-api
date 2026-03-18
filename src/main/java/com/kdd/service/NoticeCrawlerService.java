@@ -349,6 +349,7 @@ public class NoticeCrawlerService {
                     .content((String) chunk.get("content"))
                     .page(1)
                     .sourceUrl(noticeUrl)
+                    .category("공지사항")
                     .build();
                 chunkRepo.save(entity);
                 savedChunks++;

@@ -2,6 +2,7 @@ package com.kdd.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "document_chunks")
@@ -18,4 +19,9 @@ public class DocumentChunk {
     private Integer page;
     private boolean hasTable;
     private String sourceUrl;
+    private String category;
+
+    @Column(updatable = false)
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
 }

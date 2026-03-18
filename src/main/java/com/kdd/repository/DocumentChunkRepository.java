@@ -2,7 +2,9 @@ package com.kdd.repository;
 
 import com.kdd.entity.DocumentChunk;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface DocumentChunkRepository extends JpaRepository<DocumentChunk, String> {
@@ -24,4 +26,8 @@ public interface DocumentChunkRepository extends JpaRepository<DocumentChunk, St
            "WHERE d.docName LIKE '[공지]%' OR d.docName LIKE '[공지첨부]%' " +
            "GROUP BY d.docName ORDER BY d.id DESC")
     List<Object[]> findNoticeDocs();
+
+    @Modifying
+    @Query("UPDATE DocumentChunk d SET d.category = :category WHERE d.docName = :docName")
+    int updateCategoryByDocName(@Param("docName") String docName, @Param("category") String category);
 }

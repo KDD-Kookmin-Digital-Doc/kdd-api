@@ -12,9 +12,14 @@ public class UserProfile {
     private String email;
 
     private String name;
+    private String role;
     private String studentId;
     private String department;
     private String grade;
+
+    @Column(updatable = false)
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
 
     @Builder.Default
     private LocalDateTime updatedAt = LocalDateTime.now();
