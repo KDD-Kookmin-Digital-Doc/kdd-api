@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: kdd
+      POSTGRES_USER: kdd
+      POSTGRES_PASSWORD: kdd
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - kdd-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - kdd-network
+
+networks:
+  kdd-network:
+    driver: bridge
+
+volumes:
+  pg_data:
