@@ -30,3 +30,4 @@ app:
   upload-dir: ${UPLOAD_DIR:uploads}
   chunk-size: ${CHUNK_SIZE:550}
   chunk-overlap: ${CHUNK_OVERLAP:100}
+  cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
