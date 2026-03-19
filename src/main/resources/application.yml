@@ -1,3 +1,7 @@
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
 server:
   port: 8000
 
@@ -9,9 +13,6 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
-    hibernate:
-      ddl-auto: ${DDL_AUTO:validate}
-    show-sql: false
   data:
     redis:
       host: ${REDIS_HOST:localhost}
