@@ -9,6 +9,7 @@ import com.kdd.service.GoogleAuthService;
 import com.kdd.service.JwtService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,7 +30,7 @@ public class AuthController {
         try {
             Map<String, String> userInfo = googleAuthService.verifyToken(req.getCredential());
             String email = userInfo.get("email");
-            String name = userInfo.get("name");
+            String name = userInfo.getOrDefault("name", "Unknown");
 
             // 첫 로그인 시 프로필 자동 생성
             if (!userProfileRepository.existsById(email)) {
@@ -79,6 +80,7 @@ public class AuthController {
                 .orElse(ResponseEntity.status(404).body(null));
     }
 
+    @Profile("dev")
     @GetMapping("/auth/dev-token")
     public ResponseEntity<?> devToken(@RequestParam String email,
                                       @RequestParam(defaultValue = "개발자") String name) {

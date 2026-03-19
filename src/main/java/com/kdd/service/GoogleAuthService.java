@@ -34,8 +34,9 @@ public class GoogleAuthService {
             String email = payload.getEmail();
 
             // 허용 도메인 검증
-            if (!email.endsWith("@" + appConfig.getAllowedDomain())) {
-                throw new RuntimeException("허용되지 않은 이메일 도메인입니다: " + email);
+            String domain = email.substring(email.indexOf("@") + 1);
+            if (!domain.equals(appConfig.getAllowedDomain())) {
+                throw new RuntimeException("허용되지 않은 이메일 도메인입니다: " + domain);
             }
 
             Map<String, String> userInfo = new HashMap<>();
