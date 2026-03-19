@@ -4,6 +4,7 @@ import com.kdd.config.AppConfig;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,10 +18,16 @@ import java.util.HexFormat;
 public class JwtService {
 
     private final AppConfig appConfig;
+    private SecretKey cachedKey;
+
+    @PostConstruct
+    private void init() {
+        byte[] keyBytes = HexFormat.of().parseHex(appConfig.getJwtSecret());
+        this.cachedKey = Keys.hmacShaKeyFor(keyBytes);
+    }
 
     private SecretKey getKey() {
-        byte[] keyBytes = HexFormat.of().parseHex(appConfig.getJwtSecret());
-        return Keys.hmacShaKeyFor(keyBytes);
+        return cachedKey;
     }
 
     public String createToken(String email, String name) {
