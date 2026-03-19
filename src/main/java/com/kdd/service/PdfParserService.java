@@ -13,6 +13,9 @@ import java.util.regex.Pattern;
 @Service
 public class PdfParserService {
 
+    private static final Pattern SECTION_PATTERN =
+            Pattern.compile("제\\s*(\\d+)\\s*장[:\\s]+([^\\n]+)");
+
     public List<Map<String, Object>> parse(String filePath, String docName) {
         List<Map<String, Object>> chunks = new ArrayList<>();
 
@@ -46,8 +49,7 @@ public class PdfParserService {
     }
 
     private String extractSectionPath(String text) {
-        Pattern p = Pattern.compile("제\\s*(\\d+)\\s*장[:\\s]+([^\\n]+)");
-        Matcher m = p.matcher(text.substring(0, Math.min(500, text.length())));
+        Matcher m = SECTION_PATTERN.matcher(text.substring(0, Math.min(500, text.length())));
         if (m.find()) {
             return "제" + m.group(1) + "장: " + m.group(2).trim();
         }

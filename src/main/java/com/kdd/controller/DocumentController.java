@@ -32,11 +32,22 @@ public class DocumentController {
     private final ChunkerService chunkerService;
     private final DocumentChunkRepository chunkRepo;
 
-    private void requireAdmin(HttpServletRequest request) {
+    private ResponseEntity<?> checkAdminAccess(HttpServletRequest request) {
         String email = jwtService.extractEmail(request);
-        if (email == null || !appConfig.getDocAdminEmails().contains(email)) {
-            throw new RuntimeException("Admin access required");
+        if (email == null) {
+            return ResponseEntity.status(401).body(Map.of("detail", "인증이 필요합니다"));
         }
+        if (!appConfig.getDocAdminEmails().contains(email)) {
+            return ResponseEntity.status(403).body(Map.of("detail", "관리자 권한이 필요합니다"));
+        }
+        return null;
+    }
+
+    private String sanitizeFilename(String original) {
+        if (original == null || original.isBlank()) {
+            return UUID.randomUUID().toString() + ".pdf";
+        }
+        return Paths.get(original).getFileName().toString();
     }
 
     @PostMapping("/upload-rdb")
@@ -44,18 +55,21 @@ public class DocumentController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "category", defaultValue = "") String category,
             HttpServletRequest request) {
-        requireAdmin(request);
+        ResponseEntity<?> adminCheck = checkAdminAccess(request);
+        if (adminCheck != null) return adminCheck;
         try {
-            Path uploadDir = Paths.get(appConfig.getUploadDir());
-            Files.createDirectories(uploadDir);
-            Path filePath = uploadDir.resolve(file.getOriginalFilename());
-            file.transferTo(filePath.toFile());
-
-            if (!file.getOriginalFilename().endsWith(".pdf")) {
+            String originalFilename = file.getOriginalFilename();
+            if (originalFilename == null || !originalFilename.toLowerCase().endsWith(".pdf")) {
                 return ResponseEntity.badRequest().body(Map.of("detail", "Unsupported file type"));
             }
 
-            List<Map<String, Object>> parsed = pdfParser.parse(filePath.toString(), file.getOriginalFilename());
+            String safeFilename = sanitizeFilename(originalFilename);
+            Path uploadDir = Paths.get(appConfig.getUploadDir());
+            Files.createDirectories(uploadDir);
+            Path filePath = uploadDir.resolve(safeFilename);
+            file.transferTo(filePath.toFile());
+
+            List<Map<String, Object>> parsed = pdfParser.parse(filePath.toString(), safeFilename);
 
             List<Map<String, Object>> allChunks = new ArrayList<>();
             for (Map<String, Object> section : parsed) {
@@ -83,7 +97,7 @@ public class DocumentController {
 
             return ResponseEntity.ok(Map.of(
                     "message", "RDB 저장 완료: " + saved + " chunks",
-                    "filename", file.getOriginalFilename(),
+                    "filename", safeFilename,
                     "chunks", saved
             ));
         } catch (Exception e) {
@@ -126,7 +140,9 @@ public class DocumentController {
     public ResponseEntity<?> deleteDocument(
             @PathVariable String filename,
             HttpServletRequest request) {
-        requireAdmin(request);
+        ResponseEntity<?> adminCheck = checkAdminAccess(request);
+        if (adminCheck != null) return adminCheck;
+
         String nfc = Normalizer.normalize(filename, Normalizer.Form.NFC);
         String nfd = Normalizer.normalize(filename, Normalizer.Form.NFD);
 
