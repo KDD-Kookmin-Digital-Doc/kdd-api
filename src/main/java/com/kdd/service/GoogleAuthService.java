@@ -32,10 +32,14 @@ public class GoogleAuthService {
 
             GoogleIdToken.Payload payload = idToken.getPayload();
             String email = payload.getEmail();
+            if (email == null || email.isBlank()) {
+                throw new RuntimeException("이메일 정보를 가져올 수 없습니다");
+            }
 
             // 허용 도메인 검증
-            if (!email.endsWith("@" + appConfig.getAllowedDomain())) {
-                throw new RuntimeException("허용되지 않은 이메일 도메인입니다: " + email);
+            String domain = email.substring(email.indexOf("@") + 1);
+            if (!domain.equals(appConfig.getAllowedDomain())) {
+                throw new RuntimeException("허용되지 않은 이메일 도메인입니다: " + domain);
             }
 
             Map<String, String> userInfo = new HashMap<>();
