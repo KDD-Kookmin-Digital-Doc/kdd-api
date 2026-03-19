@@ -22,7 +22,6 @@ spring:
       max-request-size: 500MB
 
 app:
-  gemini-api-key: ${GEMINI_API_KEY:}
   google-client-id: ${GOOGLE_CLIENT_ID:}
   allowed-domain: ${ALLOWED_DOMAIN:kookmin.ac.kr}
   doc-admin-emails: ${DOC_ADMIN_EMAILS:}

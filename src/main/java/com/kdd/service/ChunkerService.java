@@ -13,8 +13,14 @@ public class ChunkerService {
     private final AppConfig appConfig;
 
     public List<Map<String, Object>> chunk(String content, Map<String, Object> metadata) {
+        if (content == null || content.isEmpty()) {
+            return Collections.emptyList();
+        }
         int chunkSize = appConfig.getChunkSize();
         int overlap = appConfig.getChunkOverlap();
+        if (overlap >= chunkSize) {
+            throw new IllegalStateException("chunk-overlap must be less than chunk-size");
+        }
         List<Map<String, Object>> chunks = new ArrayList<>();
         int start = 0;
         int idx = 0;

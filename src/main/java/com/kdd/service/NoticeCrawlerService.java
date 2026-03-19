@@ -17,7 +17,6 @@ import org.springframework.stereotype.Service;
 import java.io.*;
 import java.nio.file.*;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Slf4j
@@ -27,7 +26,6 @@ public class NoticeCrawlerService {
 
     private final DocumentChunkRepository chunkRepo;
     private final ChunkerService chunkerService;
-    private final GeminiService geminiService;
 
     private static final String BASE_URL = "https://cs.kookmin.ac.kr/news/notice/";
     private static final String NOTICE_PDF_DIR = "crawled_notices/pdf";
@@ -108,16 +106,7 @@ public class NoticeCrawlerService {
                 }
             }
 
-            Set<Integer> validIndices = filterWithGemini(detailedNotices);
-            log.info("Gemini 필터: {}개 중 {}개 유효", detailedNotices.size(), validIndices.size());
-
-            for (int i = 0; i < detailedNotices.size(); i++) {
-                Map<String, String> notice = detailedNotices.get(i);
-                if (!validIndices.contains(i)) {
-                    skipped++;
-                    log.info("LLM 필터 제외: {}", notice.get("title"));
-                    continue;
-                }
+            for (Map<String, String> notice : detailedNotices) {
                 try {
                     Map<String, Object> result = processNotice(page, context, notice);
                     totalChunks += (int) result.get("chunks_saved");
@@ -151,74 +140,6 @@ public class NoticeCrawlerService {
             result.put("errors", errors.subList(0, Math.min(errors.size(), 10)));
         }
         return result;
-    }
-
-    private Set<Integer> filterWithGemini(List<Map<String, String>> notices) {
-        Set<Integer> valid = new HashSet<>();
-        if (notices.isEmpty()) return valid;
-
-        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy년 M월 d일"));
-
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < notices.size(); i++) {
-            Map<String, String> n = notices.get(i);
-            String contentPreview = n.getOrDefault("content", "");
-            if (contentPreview.length() > 300) {
-                contentPreview = contentPreview.substring(0, 300) + "...";
-            }
-            sb.append(String.format("%d. [%s] %s\n본문: %s\n\n",
-                i + 1, n.get("date"), n.get("title"), contentPreview));
-        }
-
-        String prompt = String.format("""
-오늘 날짜: %s
-
-아래는 대학교 소프트웨어융합대학 공지사항 목록이야.
-각 공지의 제목과 본문을 보고, RAG 지식베이스(학생 질의응답 시스템)에 저장할 가치가 있는지 판단해줘.
-
-[저장 O] 기준:
-- 학사 규정, 졸업 요건, 수강신청, 장학금, 출석인정 등 학생에게 유용한 정보
-- 신청/마감일이 오늘 기준 아직 유효한 안내
-- 제도 변경, 인증 요건 등 지속적으로 참조될 정보
-- 노트북 대여, 멘토링 등 학생 지원 관련 안내
-
-[저장 X] 기준:
-- 신청 마감일이 이미 지난 공지 (오늘 이전에 마감)
-- 이미 종료된 행사나 프로그램
-- 본문이 비어있거나 의미 없는 공지
-
-결과를 아래 형식으로만 답해 (다른 말 없이):
-1:O
-2:X
-3:O
-...
-
-공지 목록:
-%s""", today, sb.toString());
-
-        try {
-            String response = geminiService.generate(prompt);
-            log.info("Gemini 필터 응답: {}", response.trim());
-
-            for (String line : response.trim().split("\n")) {
-                line = line.trim();
-                if (line.contains(":")) {
-                    String[] parts = line.split(":", 2);
-                    try {
-                        int idx = Integer.parseInt(parts[0].trim()) - 1;
-                        boolean keep = parts[1].trim().toUpperCase().startsWith("O");
-                        if (keep && idx >= 0 && idx < notices.size()) {
-                            valid.add(idx);
-                        }
-                    } catch (NumberFormatException ignored) {}
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Gemini 필터 실패, 전체 포함: {}", e.getMessage());
-            for (int i = 0; i < notices.size(); i++) valid.add(i);
-        }
-
-        return valid;
     }
 
     private Map<String, Object> processNotice(Page page, BrowserContext context,

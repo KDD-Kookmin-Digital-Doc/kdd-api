@@ -8,9 +8,6 @@ import org.springframework.context.annotation.Configuration;
 @Getter
 public class AppConfig {
 
-    @Value("${app.gemini-api-key}")
-    private String geminiApiKey;
-
     @Value("${app.google-client-id}")
     private String googleClientId;
 

@@ -34,11 +34,22 @@ public class DocumentController {
     private final DocumentChunkRepository chunkRepo;
     private final NoticeCrawlerService noticeCrawler;
 
-    private void requireAdmin(HttpServletRequest request) {
+    private ResponseEntity<?> checkAdminAccess(HttpServletRequest request) {
         String email = jwtService.extractEmail(request);
-        if (email == null || !appConfig.getDocAdminEmails().contains(email)) {
-            throw new RuntimeException("Admin access required");
+        if (email == null) {
+            return ResponseEntity.status(401).body(Map.of("detail", "인증이 필요합니다"));
         }
+        if (!appConfig.getDocAdminEmails().contains(email)) {
+            return ResponseEntity.status(403).body(Map.of("detail", "관리자 권한이 필요합니다"));
+        }
+        return null;
+    }
+
+    private String sanitizeFilename(String original) {
+        if (original == null || original.isBlank()) {
+            return UUID.randomUUID().toString() + ".pdf";
+        }
+        return Paths.get(original).getFileName().toString();
     }
 
     @PostMapping("/upload-rdb")
@@ -46,18 +57,21 @@ public class DocumentController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "category", defaultValue = "") String category,
             HttpServletRequest request) {
-        requireAdmin(request);
+        ResponseEntity<?> authError = checkAdminAccess(request);
+        if (authError != null) return authError;
         try {
-            Path uploadDir = Paths.get(appConfig.getUploadDir());
-            Files.createDirectories(uploadDir);
-            Path filePath = uploadDir.resolve(file.getOriginalFilename());
-            file.transferTo(filePath.toFile());
+            String safeFilename = sanitizeFilename(file.getOriginalFilename());
 
-            if (!file.getOriginalFilename().endsWith(".pdf")) {
+            if (!safeFilename.endsWith(".pdf")) {
                 return ResponseEntity.badRequest().body(Map.of("detail", "Unsupported file type"));
             }
 
-            List<Map<String, Object>> parsed = pdfParser.parse(filePath.toString(), file.getOriginalFilename());
+            Path uploadDir = Paths.get(appConfig.getUploadDir());
+            Files.createDirectories(uploadDir);
+            Path filePath = uploadDir.resolve(safeFilename);
+            file.transferTo(filePath.toFile());
+
+            List<Map<String, Object>> parsed = pdfParser.parse(filePath.toString(), safeFilename);
 
             List<Map<String, Object>> allChunks = new ArrayList<>();
             for (Map<String, Object> section : parsed) {
@@ -85,7 +99,7 @@ public class DocumentController {
 
             return ResponseEntity.ok(Map.of(
                     "message", "RDB 저장 완료: " + saved + " chunks",
-                    "filename", file.getOriginalFilename(),
+                    "filename", safeFilename,
                     "chunks", saved
             ));
         } catch (Exception e) {
@@ -128,7 +142,8 @@ public class DocumentController {
     public ResponseEntity<?> deleteDocument(
             @PathVariable String filename,
             HttpServletRequest request) {
-        requireAdmin(request);
+        ResponseEntity<?> authError = checkAdminAccess(request);
+        if (authError != null) return authError;
         String nfc = Normalizer.normalize(filename, Normalizer.Form.NFC);
         String nfd = Normalizer.normalize(filename, Normalizer.Form.NFD);
 
@@ -182,11 +197,8 @@ public class DocumentController {
     public ResponseEntity<?> crawlNotices(
             @RequestParam(defaultValue = "7") int days,
             HttpServletRequest request) {
-        try {
-            requireAdmin(request);
-        } catch (Exception e) {
-            return ResponseEntity.status(403).body(Map.of("detail", "Admin access required"));
-        }
+        ResponseEntity<?> authError = checkAdminAccess(request);
+        if (authError != null) return authError;
         try {
             Map<String, Object> result = noticeCrawler.crawlRecentNotices(days);
             return ResponseEntity.ok(result);
