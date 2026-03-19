@@ -5,6 +5,7 @@ import com.kdd.entity.DocumentChunk;
 import com.kdd.repository.DocumentChunkRepository;
 import com.kdd.service.ChunkerService;
 import com.kdd.service.JwtService;
+import com.kdd.service.NoticeCrawlerService;
 import com.kdd.service.PdfParserService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class DocumentController {
     private final PdfParserService pdfParser;
     private final ChunkerService chunkerService;
     private final DocumentChunkRepository chunkRepo;
+    private final NoticeCrawlerService noticeCrawler;
 
     private void requireAdmin(HttpServletRequest request) {
         String email = jwtService.extractEmail(request);
@@ -160,5 +162,37 @@ public class DocumentController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(resource);
+    }
+
+    @GetMapping("/crawl/notices/list")
+    public ResponseEntity<?> getNoticeList() {
+        List<Object[]> rows = chunkRepo.findNoticeDocs();
+        List<Map<String, Object>> notices = new ArrayList<>();
+        for (Object[] row : rows) {
+            notices.add(Map.of(
+                    "doc_name", row[0],
+                    "chunk_count", row[1],
+                    "source_url", ""
+            ));
+        }
+        return ResponseEntity.ok(Map.of("notices", notices));
+    }
+
+    @PostMapping("/crawl/notices")
+    public ResponseEntity<?> crawlNotices(
+            @RequestParam(defaultValue = "7") int days,
+            HttpServletRequest request) {
+        try {
+            requireAdmin(request);
+        } catch (Exception e) {
+            return ResponseEntity.status(403).body(Map.of("detail", "Admin access required"));
+        }
+        try {
+            Map<String, Object> result = noticeCrawler.crawlRecentNotices(days);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getName();
+            return ResponseEntity.status(500).body(Map.of("detail", msg));
+        }
     }
 }
