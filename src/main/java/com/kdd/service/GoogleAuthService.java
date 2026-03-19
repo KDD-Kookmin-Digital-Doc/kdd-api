@@ -32,6 +32,9 @@ public class GoogleAuthService {
 
             GoogleIdToken.Payload payload = idToken.getPayload();
             String email = payload.getEmail();
+            if (email == null || email.isBlank()) {
+                throw new RuntimeException("이메일 정보를 가져올 수 없습니다");
+            }
 
             // 허용 도메인 검증
             String domain = email.substring(email.indexOf("@") + 1);
