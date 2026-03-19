@@ -1,12 +1,15 @@
-FROM gradle:8.5-jdk17 AS build
+FROM eclipse-temurin:17-jdk-alpine AS build
 WORKDIR /app
-COPY build.gradle settings.gradle ./
+COPY gradle ./gradle
+COPY gradlew build.gradle settings.gradle ./
 COPY src ./src
-RUN gradle bootJar --no-daemon
+RUN chmod +x gradlew && ./gradlew bootJar --no-daemon
 
 FROM eclipse-temurin:17-jre-alpine
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /app
 COPY --from=build /app/build/libs/*.jar app.jar
-RUN mkdir -p uploads
+RUN mkdir -p uploads && chown -R appuser:appgroup /app
+USER appuser
 EXPOSE 8000
 ENTRYPOINT ["java", "-jar", "app.jar"]
