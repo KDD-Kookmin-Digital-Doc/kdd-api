@@ -8,11 +8,18 @@ import com.kdd.service.JwtService;
 import com.kdd.service.PdfParserService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.nio.file.*;
+import java.text.Normalizer;
 import java.util.*;
 
 @RestController
@@ -82,5 +89,76 @@ public class DocumentController {
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("detail", e.getMessage()));
         }
+    }
+
+    @GetMapping("/documents")
+    public ResponseEntity<?> listDocuments() {
+        try {
+            Map<String, Long> indexed = new HashMap<>();
+            for (Object[] row : chunkRepo.countByDocNameGrouped()) {
+                indexed.put((String) row[0], (Long) row[1]);
+            }
+
+            Path uploadDir = Paths.get(appConfig.getUploadDir());
+            List<Map<String, Object>> files = new ArrayList<>();
+            if (Files.exists(uploadDir)) {
+                for (File f : uploadDir.toFile().listFiles()) {
+                    if (f.isFile()) {
+                        long chunkCount = indexed.getOrDefault(f.getName(), 0L);
+                        files.add(Map.of(
+                                "filename", f.getName(),
+                                "size", f.length(),
+                                "type", f.getName().substring(f.getName().lastIndexOf(".")),
+                                "chunk_count", chunkCount,
+                                "indexed", chunkCount > 0
+                        ));
+                    }
+                }
+            }
+            return ResponseEntity.ok(Map.of("documents", files));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("detail", e.getMessage()));
+        }
+    }
+
+    @Transactional
+    @DeleteMapping("/documents/{filename}")
+    public ResponseEntity<?> deleteDocument(
+            @PathVariable String filename,
+            HttpServletRequest request) {
+        requireAdmin(request);
+        String nfc = Normalizer.normalize(filename, Normalizer.Form.NFC);
+        String nfd = Normalizer.normalize(filename, Normalizer.Form.NFD);
+
+        int deleted = 0;
+        List<DocumentChunk> chunks = chunkRepo.findByDocName(nfc);
+        if (!chunks.isEmpty()) {
+            chunkRepo.deleteByDocName(nfc);
+            deleted += chunks.size();
+        }
+        if (!nfd.equals(nfc)) {
+            List<DocumentChunk> nfdChunks = chunkRepo.findByDocName(nfd);
+            if (!nfdChunks.isEmpty()) {
+                chunkRepo.deleteByDocName(nfd);
+                deleted += nfdChunks.size();
+            }
+        }
+
+        Path filePath = Paths.get(appConfig.getUploadDir(), filename);
+        try { Files.deleteIfExists(filePath); } catch (Exception ignored) {}
+        return ResponseEntity.ok(Map.of("message", filename + " 삭제 완료", "deleted_chunks", deleted));
+    }
+
+    @GetMapping("/documents/{filename}/preview")
+    public ResponseEntity<Resource> previewDocument(@PathVariable String filename) {
+        Path filePath = Paths.get(appConfig.getUploadDir(), filename);
+        if (!Files.exists(filePath)) {
+            return ResponseEntity.notFound().build();
+        }
+        Resource resource = new FileSystemResource(filePath);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(resource);
     }
 }
