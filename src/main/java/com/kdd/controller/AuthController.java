@@ -8,7 +8,9 @@ import com.kdd.repository.UserProfileRepository;
 import com.kdd.service.GoogleAuthService;
 import com.kdd.service.JwtService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,21 +27,20 @@ public class AuthController {
     private final AppConfig appConfig;
 
     @PostMapping("/auth/google")
-    public ResponseEntity<?> googleLogin(@RequestBody AuthRequest req) {
+    public ResponseEntity<?> googleLogin(@Valid @RequestBody AuthRequest req) {
         try {
             Map<String, String> userInfo = googleAuthService.verifyToken(req.getCredential());
             String email = userInfo.get("email");
-            String name = userInfo.get("name");
+            String name = userInfo.getOrDefault("name", "Unknown");
 
-            // 첫 로그인 시 프로필 자동 생성
-            if (!userProfileRepository.existsById(email)) {
-                UserProfile profile = UserProfile.builder()
+            // 첫 로그인 시 프로필 자동 생성 (upsert)
+            userProfileRepository.findById(email).orElseGet(() ->
+                userProfileRepository.save(UserProfile.builder()
                         .email(email)
                         .name(name)
                         .role("user")
-                        .build();
-                userProfileRepository.save(profile);
-            }
+                        .build())
+            );
 
             String token = jwtService.createToken(email, name);
 
@@ -57,7 +58,7 @@ public class AuthController {
                     .user(user)
                     .build());
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", "인증에 실패했습니다"));
         }
     }
 
@@ -79,6 +80,7 @@ public class AuthController {
                 .orElse(ResponseEntity.status(404).body(null));
     }
 
+    @Profile("dev")
     @GetMapping("/auth/dev-token")
     public ResponseEntity<?> devToken(@RequestParam String email,
                                       @RequestParam(defaultValue = "개발자") String name) {

@@ -16,6 +16,6 @@ public interface DocumentChunkRepository extends JpaRepository<DocumentChunk, St
 
     @Query("SELECT d.docName, COUNT(d) FROM DocumentChunk d " +
            "WHERE d.docName LIKE '[공지]%' OR d.docName LIKE '[공지첨부]%' " +
-           "GROUP BY d.docName ORDER BY d.id DESC")
+           "GROUP BY d.docName ORDER BY d.docName DESC")
     List<Object[]> findNoticeDocs();
 }
