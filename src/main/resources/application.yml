@@ -20,3 +20,13 @@ spring:
     multipart:
       max-file-size: 500MB
       max-request-size: 500MB
+
+app:
+  gemini-api-key: ${GEMINI_API_KEY:}
+  google-client-id: ${GOOGLE_CLIENT_ID:}
+  allowed-domain: ${ALLOWED_DOMAIN:kookmin.ac.kr}
+  doc-admin-emails: ${DOC_ADMIN_EMAILS:}
+  jwt-secret: ${JWT_SECRET:}
+  upload-dir: ${UPLOAD_DIR:uploads}
+  chunk-size: ${CHUNK_SIZE:550}
+  chunk-overlap: ${CHUNK_OVERLAP:100}
