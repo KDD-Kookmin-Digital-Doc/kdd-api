@@ -1,0 +1,22 @@
+server:
+  port: 8000
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/kdd}
+    username: ${DB_USERNAME:kdd}
+    password: ${DB_PASSWORD:kdd}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB
