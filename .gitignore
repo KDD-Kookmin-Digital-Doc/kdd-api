@@ -19,5 +19,7 @@ Thumbs.db
 .env
 
 # Runtime data
+*.log
+logs/
 uploads/
 crawled_notices/pdf/

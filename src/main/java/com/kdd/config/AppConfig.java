@@ -4,11 +4,14 @@ import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.Arrays;
+import java.util.List;
+
 @Configuration
 @Getter
 public class AppConfig {
 
-    @Value("${app.gemini-api-key}")
+    @Value("${app.gemini-api-key:}")
     private String geminiApiKey;
 
     @Value("${app.google-client-id}")
@@ -17,7 +20,7 @@ public class AppConfig {
     @Value("${app.allowed-domain}")
     private String allowedDomain;
 
-    @Value("${app.doc-admin-emails}")
+    @Value("${app.doc-admin-emails:}")
     private String docAdminEmails;
 
     @Value("${app.jwt-secret}")
@@ -31,4 +34,15 @@ public class AppConfig {
 
     @Value("${app.chunk-overlap}")
     private int chunkOverlap;
+
+    @Value("${app.cors-allowed-origins:*}")
+    private String corsAllowedOrigins;
+
+    public List<String> getDocAdminEmailList() {
+        if (docAdminEmails == null || docAdminEmails.isBlank()) return List.of();
+        return Arrays.stream(docAdminEmails.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
 }

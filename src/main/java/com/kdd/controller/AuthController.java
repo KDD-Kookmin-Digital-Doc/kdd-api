@@ -45,7 +45,7 @@ public class AuthController {
             String token = jwtService.createToken(email, name);
 
             // 관리자 여부 확인
-            boolean isAdmin = appConfig.getDocAdminEmails().contains(email);
+            boolean isAdmin = appConfig.getDocAdminEmailList().contains(email);
 
             Map<String, Object> user = new HashMap<>();
             user.put("email", email);
@@ -74,7 +74,7 @@ public class AuthController {
                     user.put("email", profile.getEmail());
                     user.put("name", profile.getName());
                     user.put("role", profile.getRole());
-                    user.put("isAdmin", appConfig.getDocAdminEmails().contains(email));
+                    user.put("isAdmin", appConfig.getDocAdminEmailList().contains(email));
                     return ResponseEntity.ok(user);
                 })
                 .orElse(ResponseEntity.status(404).body(null));

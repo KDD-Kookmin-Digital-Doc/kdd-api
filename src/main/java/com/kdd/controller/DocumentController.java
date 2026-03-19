@@ -8,6 +8,7 @@ import com.kdd.service.JwtService;
 import com.kdd.service.PdfParserService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -22,6 +23,7 @@ import java.nio.file.*;
 import java.text.Normalizer;
 import java.util.*;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 public class DocumentController {
@@ -37,7 +39,7 @@ public class DocumentController {
         if (email == null) {
             return ResponseEntity.status(401).body(Map.of("detail", "인증이 필요합니다"));
         }
-        if (!appConfig.getDocAdminEmails().contains(email)) {
+        if (!appConfig.getDocAdminEmailList().contains(email)) {
             return ResponseEntity.status(403).body(Map.of("detail", "관리자 권한이 필요합니다"));
         }
         return null;
@@ -48,6 +50,11 @@ public class DocumentController {
             return UUID.randomUUID().toString() + ".pdf";
         }
         return Paths.get(original).getFileName().toString();
+    }
+
+    private String getFileExtension(String filename) {
+        int dotIndex = filename.lastIndexOf(".");
+        return dotIndex > 0 ? filename.substring(dotIndex) : "";
     }
 
     @PostMapping("/upload-rdb")
@@ -101,7 +108,8 @@ public class DocumentController {
                     "chunks", saved
             ));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(Map.of("detail", e.getMessage()));
+            log.error("문서 업로드 실패", e);
+            return ResponseEntity.status(500).body(Map.of("detail", "문서 업로드 중 오류가 발생했습니다"));
         }
     }
 
@@ -116,22 +124,26 @@ public class DocumentController {
             Path uploadDir = Paths.get(appConfig.getUploadDir());
             List<Map<String, Object>> files = new ArrayList<>();
             if (Files.exists(uploadDir)) {
-                for (File f : uploadDir.toFile().listFiles()) {
-                    if (f.isFile()) {
-                        long chunkCount = indexed.getOrDefault(f.getName(), 0L);
-                        files.add(Map.of(
-                                "filename", f.getName(),
-                                "size", f.length(),
-                                "type", f.getName().substring(f.getName().lastIndexOf(".")),
-                                "chunk_count", chunkCount,
-                                "indexed", chunkCount > 0
-                        ));
+                File[] fileList = uploadDir.toFile().listFiles();
+                if (fileList != null) {
+                    for (File f : fileList) {
+                        if (f.isFile()) {
+                            long chunkCount = indexed.getOrDefault(f.getName(), 0L);
+                            files.add(Map.of(
+                                    "filename", f.getName(),
+                                    "size", f.length(),
+                                    "type", getFileExtension(f.getName()),
+                                    "chunk_count", chunkCount,
+                                    "indexed", chunkCount > 0
+                            ));
+                        }
                     }
                 }
             }
             return ResponseEntity.ok(Map.of("documents", files));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(Map.of("detail", e.getMessage()));
+            log.error("문서 목록 조회 실패", e);
+            return ResponseEntity.status(500).body(Map.of("detail", "문서 목록 조회 중 오류가 발생했습니다"));
         }
     }
 
@@ -143,8 +155,9 @@ public class DocumentController {
         ResponseEntity<?> adminCheck = checkAdminAccess(request);
         if (adminCheck != null) return adminCheck;
 
-        String nfc = Normalizer.normalize(filename, Normalizer.Form.NFC);
-        String nfd = Normalizer.normalize(filename, Normalizer.Form.NFD);
+        String safeFilename = sanitizeFilename(filename);
+        String nfc = Normalizer.normalize(safeFilename, Normalizer.Form.NFC);
+        String nfd = Normalizer.normalize(safeFilename, Normalizer.Form.NFD);
 
         int deleted = 0;
         List<DocumentChunk> chunks = chunkRepo.findByDocName(nfc);
@@ -160,20 +173,26 @@ public class DocumentController {
             }
         }
 
-        Path filePath = Paths.get(appConfig.getUploadDir(), filename);
+        Path filePath = Paths.get(appConfig.getUploadDir(), safeFilename);
         try { Files.deleteIfExists(filePath); } catch (Exception ignored) {}
-        return ResponseEntity.ok(Map.of("message", filename + " 삭제 완료", "deleted_chunks", deleted));
+        return ResponseEntity.ok(Map.of("message", safeFilename + " 삭제 완료", "deleted_chunks", deleted));
     }
 
     @GetMapping("/documents/{filename}/preview")
     public ResponseEntity<Resource> previewDocument(@PathVariable String filename) {
-        Path filePath = Paths.get(appConfig.getUploadDir(), filename);
+        String safeFilename = sanitizeFilename(filename);
+        Path uploadDir = Paths.get(appConfig.getUploadDir()).toAbsolutePath().normalize();
+        Path filePath = uploadDir.resolve(safeFilename).normalize();
+
+        if (!filePath.startsWith(uploadDir)) {
+            return ResponseEntity.badRequest().build();
+        }
         if (!Files.exists(filePath)) {
             return ResponseEntity.notFound().build();
         }
         Resource resource = new FileSystemResource(filePath);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + safeFilename + "\"")
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(resource);
     }

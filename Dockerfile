@@ -5,8 +5,8 @@ COPY gradlew build.gradle settings.gradle ./
 COPY src ./src
 RUN chmod +x gradlew && ./gradlew bootJar --no-daemon
 
-FROM eclipse-temurin:17-jre-alpine
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+FROM eclipse-temurin:17-jre-jammy
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 WORKDIR /app
 COPY --from=build /app/build/libs/*.jar app.jar
 RUN mkdir -p uploads && chown -R appuser:appgroup /app
