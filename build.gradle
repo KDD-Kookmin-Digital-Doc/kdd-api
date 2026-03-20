@@ -23,7 +23,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
 
     // DB - PostgreSQL
-    implementation 'org.postgresql:postgresql'
+    implementation 'org.postgresql:postgresql:42.7.4'
 
     // Redis
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
@@ -49,7 +49,7 @@ dependencies {
     implementation 'com.microsoft.playwright:playwright:1.50.0'
 
     // JSON
-    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
 
     // .env 파일 로딩
     implementation 'me.paulschwarz:spring-dotenv:4.0.0'
