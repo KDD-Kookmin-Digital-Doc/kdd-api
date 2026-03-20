@@ -11,31 +11,31 @@ import java.util.List;
 @Getter
 public class AppConfig {
 
-    @Value("${app.gemini-api-key:}")
+    @Value("${GEMINI_API_KEY:}")
     private String geminiApiKey;
 
-    @Value("${app.google-client-id}")
+    @Value("${GOOGLE_CLIENT_ID:}")
     private String googleClientId;
 
-    @Value("${app.allowed-domain}")
+    @Value("${ALLOWED_DOMAIN:kookmin.ac.kr}")
     private String allowedDomain;
 
-    @Value("${app.doc-admin-emails:}")
+    @Value("${DOC_ADMIN_EMAILS:}")
     private String docAdminEmails;
 
-    @Value("${app.jwt-secret}")
+    @Value("${JWT_SECRET}")
     private String jwtSecret;
 
-    @Value("${app.upload-dir}")
+    @Value("${UPLOAD_DIR:uploads}")
     private String uploadDir;
 
-    @Value("${app.chunk-size}")
+    @Value("${CHUNK_SIZE:550}")
     private int chunkSize;
 
-    @Value("${app.chunk-overlap}")
+    @Value("${CHUNK_OVERLAP:100}")
     private int chunkOverlap;
 
-    @Value("${app.cors-allowed-origins:*}")
+    @Value("${CORS_ALLOWED_ORIGINS:*}")
     private String corsAllowedOrigins;
 
     public List<String> getDocAdminEmailList() {
