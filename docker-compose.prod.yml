@@ -2,16 +2,16 @@ services:
   postgres:
     image: postgres:16-alpine
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-kdd}
-      POSTGRES_USER: ${POSTGRES_USER:-kdd}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kdd}
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - pg_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kdd}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -21,7 +21,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -38,9 +38,10 @@ services:
     env_file:
       - .env
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-kdd}
-      DB_USERNAME: ${POSTGRES_USER:-kdd}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-kdd}
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/kdd
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
       REDIS_HOST: redis
     restart: unless-stopped
     volumes:

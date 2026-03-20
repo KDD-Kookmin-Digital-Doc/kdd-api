@@ -14,10 +14,41 @@ bin/
 # OS
 .DS_Store
 Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+$RECYCLE.BIN/
 
 # Env
 .env
+.env.local
+.env.*.local
+
+# Spring Boot
+application-local.yml
+HELP.md
+
+# Logs
+*.log
+logs/
+log/
 
 # Runtime data
 uploads/
 crawled_notices/pdf/
+tmp/
+temp/
+
+# Java
+*.class
+*.ctxt
+.mtj.tmp/
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+!gradle/wrapper/gradle-wrapper.jar
+hs_err_pid*
+replay_pid*
