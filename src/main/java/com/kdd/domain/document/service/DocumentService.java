@@ -1,6 +1,7 @@
 package com.kdd.domain.document.service;
 
 import com.kdd.domain.document.dto.DocumentResponse;
+import com.kdd.domain.document.dto.DocumentStatusResponse;
 import com.kdd.domain.document.entity.Document;
 import com.kdd.domain.document.entity.DocumentChunk;
 import com.kdd.domain.document.entity.DocumentSource;
@@ -14,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @Slf4j
 @Service
@@ -29,31 +32,21 @@ public class DocumentService {
         if (file.isEmpty()) {
             throw new CustomException(ErrorCode.INVALID_INPUT);
         }
-
         String originalFileName = file.getOriginalFilename();
         if (title == null || title.isBlank()) {
-            title = originalFileName != null
-                    ? originalFileName.replaceFirst("[.][^.]+$", "")
-                    : "제목 없음";
+            title = originalFileName != null ? originalFileName.replaceFirst("[.][^.]+$", "") : "제목 없음";
         }
-
         String content = "";
         try (var pdfDoc = org.apache.pdfbox.Loader.loadPDF(file.getBytes())) {
             content = new org.apache.pdfbox.text.PDFTextStripper().getText(pdfDoc);
         } catch (Exception e) {
             log.warn("PDF 텍스트 추출 실패: {}", e.getMessage());
         }
-
         Document document = Document.builder()
-                .title(title)
-                .content(content)
+                .title(title).content(content)
                 .category(category != null ? category : "미분류")
-                .source(DocumentSource.KMU)
-                .status(DocumentStatus.COMPLETED)
-                .build();
-
+                .source(DocumentSource.KMU).status(DocumentStatus.COMPLETED).build();
         documentRepository.save(document);
-
         if (!content.isBlank()) {
             content = content.replace("\u0000", "");
             int chunkSize = 550, overlap = 100, idx = 0, start = 0;
@@ -67,7 +60,36 @@ public class DocumentService {
                 start += chunkSize - overlap;
             }
         }
-
         return DocumentResponse.from(document);
+    }
+
+    public List<DocumentResponse> getDocuments() {
+        return documentRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(DocumentResponse::from).toList();
+    }
+
+    public DocumentStatusResponse getDocumentStatus(Long documentId) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
+        return DocumentStatusResponse.from(document);
+    }
+
+    @Transactional
+    public DocumentStatusResponse reprocess(Long documentId) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
+        if (document.getStatus() == DocumentStatus.PROCESSING) {
+            throw new CustomException(ErrorCode.DOCUMENT_ALREADY_PROCESSING);
+        }
+        document.updateStatus(DocumentStatus.PENDING);
+        return DocumentStatusResponse.from(document);
+    }
+
+    @Transactional
+    public void delete(Long documentId) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
+        chunkRepository.deleteByDocumentId(documentId);
+        documentRepository.delete(document);
     }
 }
