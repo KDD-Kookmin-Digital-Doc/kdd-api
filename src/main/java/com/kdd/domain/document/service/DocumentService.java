@@ -30,9 +30,20 @@ public class DocumentService {
             throw new CustomException(ErrorCode.INVALID_INPUT);
         }
 
+        // PDF 파일 검증 (Content-Type + 매직바이트)
         String contentType = file.getContentType();
         if (contentType == null || !contentType.equals("application/pdf")) {
             throw new CustomException(ErrorCode.INVALID_FILE_TYPE);
+        }
+        try {
+            byte[] header = file.getBytes();
+            if (header.length < 5 || header[0] != '%' || header[1] != 'P' || header[2] != 'D' || header[3] != 'F') {
+                throw new CustomException(ErrorCode.INVALID_FILE_TYPE);
+            }
+        } catch (CustomException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new CustomException(ErrorCode.FILE_UPLOAD_FAILED);
         }
 
         String originalFileName = file.getOriginalFilename();
@@ -58,7 +69,7 @@ public class DocumentService {
         Document document = Document.builder()
                 .title(title)
                 .content(content)
-                .category(category != null ? category : "미분류")
+                .category(category != null && !category.isBlank() ? category : "미분류")
                 .source(DocumentSource.KMU)
                 .status(status)
                 .build();

@@ -22,6 +22,9 @@ public class DocumentResponse {
     private LocalDateTime updatedAt;
 
     public static DocumentResponse from(Document document) {
+        if (document == null) {
+            throw new IllegalArgumentException("document must not be null");
+        }
         return DocumentResponse.builder()
                 .id(document.getId())
                 .title(document.getTitle())
