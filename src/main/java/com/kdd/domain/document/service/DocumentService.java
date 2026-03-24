@@ -1,6 +1,7 @@
 package com.kdd.domain.document.service;
 
 import com.kdd.domain.document.dto.DocumentResponse;
+import com.kdd.domain.document.dto.DocumentStatusResponse;
 import com.kdd.domain.document.entity.Document;
 import com.kdd.domain.document.entity.DocumentChunk;
 import com.kdd.domain.document.entity.DocumentSource;
@@ -14,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @Slf4j
 @Service
@@ -78,5 +81,35 @@ public class DocumentService {
         }
 
         return DocumentResponse.from(document);
+    }
+
+    public List<DocumentResponse> getDocuments() {
+        return documentRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(DocumentResponse::from).toList();
+    }
+
+    public DocumentStatusResponse getDocumentStatus(Long documentId) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
+        return DocumentStatusResponse.from(document);
+    }
+
+    @Transactional
+    public DocumentStatusResponse reprocess(Long documentId) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
+        if (document.getStatus() == DocumentStatus.PROCESSING) {
+            throw new CustomException(ErrorCode.DOCUMENT_ALREADY_PROCESSING);
+        }
+        document.updateStatus(DocumentStatus.PENDING);
+        return DocumentStatusResponse.from(document);
+    }
+
+    @Transactional
+    public void delete(Long documentId) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
+        chunkRepository.deleteByDocumentId(documentId);
+        documentRepository.delete(document);
     }
 }

@@ -1,6 +1,7 @@
 package com.kdd.domain.document.controller;
 
 import com.kdd.domain.document.dto.DocumentResponse;
+import com.kdd.domain.document.dto.DocumentStatusResponse;
 import com.kdd.domain.document.service.DocumentService;
 import com.kdd.global.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -11,6 +12,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @Tag(name = "Admin - Document", description = "관리자 문서 관리 API")
 @RestController
@@ -27,5 +30,30 @@ public class AdminDocumentController {
             @RequestParam(value = "title", required = false) String title,
             @RequestParam(value = "category", required = false) String category) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(documentService.upload(file, title, category)));
+    }
+
+    @Operation(summary = "관리자 문서 목록 조회", description = "관리자가 문서 목록을 조회한다.")
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<DocumentResponse>>> getDocuments() {
+        return ResponseEntity.ok(ApiResponse.ok(documentService.getDocuments()));
+    }
+
+    @Operation(summary = "문서 처리 상태 조회", description = "업로드 후 파싱/임베딩 처리 상태를 확인한다.")
+    @GetMapping("/{documentId}/status")
+    public ResponseEntity<ApiResponse<DocumentStatusResponse>> getStatus(@PathVariable Long documentId) {
+        return ResponseEntity.ok(ApiResponse.ok(documentService.getDocumentStatus(documentId)));
+    }
+
+    @Operation(summary = "문서 재처리", description = "문서 파싱 실패 시 재처리를 트리거한다.")
+    @PostMapping("/{documentId}/reprocess")
+    public ResponseEntity<ApiResponse<DocumentStatusResponse>> reprocess(@PathVariable Long documentId) {
+        return ResponseEntity.ok(ApiResponse.ok(documentService.reprocess(documentId)));
+    }
+
+    @Operation(summary = "문서 삭제", description = "관리자가 문서를 삭제한다.")
+    @DeleteMapping("/{documentId}")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long documentId) {
+        documentService.delete(documentId);
+        return ResponseEntity.ok(ApiResponse.ok());
     }
 }
