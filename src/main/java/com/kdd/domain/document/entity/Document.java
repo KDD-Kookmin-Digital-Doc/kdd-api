@@ -70,6 +70,7 @@ public class Document extends BaseTimeEntity {
     }
 
     public void updateStatus(DocumentStatus status) {
+        if (status == null) throw new IllegalArgumentException("status must not be null");
         this.status = status;
     }
 }
