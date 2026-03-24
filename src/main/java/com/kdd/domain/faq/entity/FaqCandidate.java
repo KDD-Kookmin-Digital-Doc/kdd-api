@@ -28,9 +28,6 @@ public class FaqCandidate extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     private FaqCategory category;
 
-    @Column(nullable = false)
-    private int frequency;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private FaqCandidateStatus status;
@@ -39,11 +36,10 @@ public class FaqCandidate extends BaseTimeEntity {
 
     @Builder
     public FaqCandidate(String question, String answerDraft, FaqCategory category,
-                        int frequency, FaqCandidateStatus status) {
+                        FaqCandidateStatus status) {
         this.question = question;
         this.answerDraft = answerDraft;
         this.category = category;
-        this.frequency = frequency;
         this.status = status != null ? status : FaqCandidateStatus.PENDING;
     }
 
@@ -54,5 +50,6 @@ public class FaqCandidate extends BaseTimeEntity {
 
     public void reject() {
         this.status = FaqCandidateStatus.REJECTED;
+        this.approvedAt = null;
     }
 }

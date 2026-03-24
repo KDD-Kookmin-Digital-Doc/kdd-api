@@ -29,21 +29,10 @@ public class ChatSession extends BaseTimeEntity {
     @Column(nullable = false)
     private ChatSourceType sourceType;
 
-    private Long sourceId;
-
-    @Column(nullable = false)
-    private boolean isDeleted;
-
     @Builder
-    public ChatSession(User user, String title, ChatSourceType sourceType, Long sourceId) {
+    public ChatSession(User user, String title, ChatSourceType sourceType) {
         this.user = user;
         this.title = title;
-        this.sourceType = sourceType;
-        this.sourceId = sourceId;
-        this.isDeleted = false;
-    }
-
-    public void softDelete() {
-        this.isDeleted = true;
+        this.sourceType = sourceType != null ? sourceType : ChatSourceType.NORMAL;
     }
 }

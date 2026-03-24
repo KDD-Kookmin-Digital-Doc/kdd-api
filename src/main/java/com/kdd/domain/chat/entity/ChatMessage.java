@@ -32,15 +32,14 @@ public class ChatMessage {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
-    @Enumerated(EnumType.STRING)
-    private Confidence confidence;
+    private Integer confidence;
 
     @CreatedDate
     @Column(updatable = false)
     private LocalDateTime createdAt;
 
     @Builder
-    public ChatMessage(ChatSession session, MessageRole role, String content, Confidence confidence) {
+    public ChatMessage(ChatSession session, MessageRole role, String content, Integer confidence) {
         this.session = session;
         this.role = role;
         this.content = content;

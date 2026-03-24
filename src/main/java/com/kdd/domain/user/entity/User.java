@@ -41,10 +41,13 @@ public class User extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     private AcademicStatus academicStatus;
 
+    @Column(columnDefinition = "TEXT")
+    private String ect;
+
     @Builder
     public User(String email, String name, UserRole role, UserType userType,
                 String department, String studentId, Integer grade,
-                Integer admissionYear, AcademicStatus academicStatus) {
+                Integer admissionYear, AcademicStatus academicStatus, String ect) {
         this.email = email;
         this.name = name;
         this.role = role != null ? role : UserRole.USER;
@@ -54,5 +57,6 @@ public class User extends BaseTimeEntity {
         this.grade = grade;
         this.admissionYear = admissionYear;
         this.academicStatus = academicStatus;
+        this.ect = ect;
     }
 }
