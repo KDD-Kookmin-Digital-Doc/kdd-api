@@ -8,5 +8,5 @@ import java.util.List;
 
 public interface FaqCandidateRepository extends JpaRepository<FaqCandidate, Long> {
 
-    List<FaqCandidate> findByStatusOrderByFrequencyDesc(FaqCandidateStatus status);
+    List<FaqCandidate> findByStatusOrderByCreatedAtDesc(FaqCandidateStatus status);
 }

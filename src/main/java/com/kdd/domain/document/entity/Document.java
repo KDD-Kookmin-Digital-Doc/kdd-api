@@ -10,7 +10,9 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "documents")
+@Table(name = "documents", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_documents_original_url", columnNames = "original_url")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Document extends BaseTimeEntity {
@@ -60,6 +62,9 @@ public class Document extends BaseTimeEntity {
         this.content = content;
         this.summary = summary;
         this.category = category;
+        if (source == null) {
+            throw new IllegalArgumentException("source must not be null");
+        }
         this.source = source;
         this.originalUrl = originalUrl;
         this.author = author;
