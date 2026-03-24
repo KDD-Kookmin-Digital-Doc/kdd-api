@@ -147,11 +147,13 @@ public class CrawlTestRunner implements CommandLineRunner {
                 }
             }
 
-            // 날짜 체크: 마지막 날짜가 2024-03 이전이면 중단
+            // 날짜 체크: 최근 2년 이전이면 중단 (동적 계산)
+            LocalDateTime cutoff = LocalDateTime.now().minusYears(2);
+            String cutoffStr = String.format("%02d.%02d", cutoff.getYear() % 100, cutoff.getMonthValue());
             Elements dates = doc.select("li.date");
             if (!dates.isEmpty()) {
                 String lastDate = dates.get(dates.size() - 1).text().trim();
-                if (lastDate.compareTo("24.03") < 0) break;
+                if (lastDate.compareTo(cutoffStr) < 0) break;
             }
 
             Thread.sleep(200);
@@ -159,7 +161,14 @@ public class CrawlTestRunner implements CommandLineRunner {
         return ids;
     }
 
+    @org.springframework.transaction.annotation.Transactional
     private boolean processNotice(String noticeUrl, String postId, String category) throws Exception {
+        // 중복 방지: URL 기준
+        if (documentRepository.existsByOriginalUrl(noticeUrl)) {
+            System.out.print("[SKIP 중복] " + noticeUrl);
+            return false;
+        }
+
         org.jsoup.nodes.Document doc = Jsoup.connect(noticeUrl)
                 .userAgent("Mozilla/5.0").timeout(10000).get();
 
@@ -176,10 +185,10 @@ public class CrawlTestRunner implements CommandLineRunner {
 
         System.out.print("[" + category + "] " + title.substring(0, Math.min(35, title.length())));
 
+        // 본문 없어도 첨부파일 있으면 처리
         if (bodyText.isEmpty() && contentEl != null && !contentEl.select("img").isEmpty()) {
             bodyText = "(이미지 공지) " + title;
         }
-        if (bodyText.isEmpty()) return false;
 
         // 첨부파일 수집 (중복 제거)
         List<String> attachmentUrls = new ArrayList<>();
@@ -193,9 +202,8 @@ public class CrawlTestRunner implements CommandLineRunner {
             }
         }
 
-        // PDF 생성
-        InputStream fontStream = findKoreanFont();
-        if (fontStream == null) throw new RuntimeException("폰트 없음");
+        // 본문도 없고 첨부파일도 없으면 스킵
+        if (bodyText.isEmpty() && attachmentUrls.isEmpty()) return false;
 
         String fullText = title + "\n\n"
                 + "작성일: " + date + " | 작성자: " + author + "\n"
@@ -204,13 +212,15 @@ public class CrawlTestRunner implements CommandLineRunner {
                 + "─".repeat(40) + "\n"
                 + "원문: " + noticeUrl;
 
+        // PDF 생성 (try-with-resources로 폰트 스트림 관리)
         Path bodyPdf = Path.of(OUTPUT_DIR, "body_" + postId + ".pdf");
-        try (PDDocument pdfDoc = new PDDocument()) {
+        try (InputStream fontStream = findKoreanFont();
+             PDDocument pdfDoc = new PDDocument()) {
+            if (fontStream == null) throw new RuntimeException("폰트 없음");
             PDType0Font font = PDType0Font.load(pdfDoc, fontStream);
             writeTextToPages(pdfDoc, font, fullText);
             pdfDoc.save(bodyPdf.toFile());
         }
-        fontStream.close();
 
         // 첨부파일 병합
         List<Path> attPdfs = new ArrayList<>();
