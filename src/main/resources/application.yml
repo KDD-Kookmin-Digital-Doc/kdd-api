@@ -19,3 +19,16 @@ spring:
     multipart:
       max-file-size: 500MB
       max-request-size: 500MB
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-token-expiry: 1800000
+    refresh-token-expiry: 1209600000
+  google:
+    client-id: ${GOOGLE_CLIENT_ID}
+    client-secret: ${GOOGLE_CLIENT_SECRET}
+    redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:3000/auth/callback}
+  auth:
+    allowed-domain: ${ALLOWED_DOMAIN:kookmin.ac.kr}
+    admin-emails: ${DOC_ADMIN_EMAILS:}
