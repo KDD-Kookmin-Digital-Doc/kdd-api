@@ -18,7 +18,6 @@ public class DocumentResponse {
     private String status;
     private String originalUrl;
     private String originalFilename;
-    private String storageKey;
     private String mimeType;
     private Long fileSize;
     private String author;
@@ -39,7 +38,6 @@ public class DocumentResponse {
                 .status(document.getStatus().name())
                 .originalUrl(document.getOriginalUrl())
                 .originalFilename(document.getOriginalFilename())
-                .storageKey(document.getStorageKey())
                 .mimeType(document.getMimeType())
                 .fileSize(document.getFileSize())
                 .author(document.getAuthor())

@@ -58,6 +58,7 @@ public class FaqCandidate extends BaseTimeEntity {
     }
 
     public void approve(Faq faq) {
+        if (faq == null) throw new IllegalArgumentException("faq must not be null");
         this.status = FaqCandidateStatus.APPROVED;
         this.faq = faq;
         this.approvedAt = LocalDateTime.now();
@@ -65,6 +66,7 @@ public class FaqCandidate extends BaseTimeEntity {
 
     public void reject() {
         this.status = FaqCandidateStatus.REJECTED;
+        this.faq = null;
         this.approvedAt = null;
     }
 }

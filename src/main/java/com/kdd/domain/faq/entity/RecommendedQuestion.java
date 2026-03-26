@@ -33,7 +33,12 @@ public class RecommendedQuestion {
 
     @Builder
     public RecommendedQuestion(String content, int frequency) {
+        if (frequency < 0) throw new IllegalArgumentException("frequency must be >= 0");
         this.content = content;
         this.frequency = frequency;
+    }
+
+    public void incrementFrequency() {
+        this.frequency++;
     }
 }
