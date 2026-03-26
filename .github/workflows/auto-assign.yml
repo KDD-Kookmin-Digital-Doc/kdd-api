@@ -1,18 +1,46 @@
-name: Auto Assign
+name: Auto Assign & Cross Review
+
 on:
-  issues:
-    types: [opened]
   pull_request:
     types: [opened]
+
 jobs:
-  run:
+  assign-and-review:
     runs-on: ubuntu-latest
     permissions:
-      issues: write
       pull-requests: write
+      issues: write
+
     steps:
-      - uses: pozil/auto-assign-issue@v1
+      - name: Assign author & set reviewer
+        uses: actions/github-script@v7
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          assignees: Sangjin-kmu,MinJuTur
-          numOfAssignee: 2
+          script: |
+            const author = context.payload.pull_request.user.login;
+
+            let reviewer;
+
+            if (author === "Sangjin-kmu") {
+              reviewer = "MinJuTur";
+            } else if (author === "MinJuTur") {
+              reviewer = "Sangjin-kmu";
+            } else {
+              console.log("해당 유저는 대상 아님");
+              return;
+            }
+
+            // 1. PR 작성자를 assignee로 등록
+            await github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              assignees: [author],
+            });
+
+            // 2. 상대방을 reviewer로 등록
+            await github.rest.pulls.requestReviewers({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              reviewers: [reviewer],
+            });
