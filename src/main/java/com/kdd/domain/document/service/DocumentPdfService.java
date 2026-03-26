@@ -19,7 +19,7 @@ public class DocumentPdfService {
 
     private final DocumentRepository documentRepository;
 
-    private static final Path PDF_DIR = Path.of("pdf-cache");
+    private static final Path PDF_DIR = Path.of("pdf-cache").toAbsolutePath().normalize();
 
     public byte[] getPdf(Long documentId) {
         Document document = documentRepository.findById(documentId)
@@ -29,8 +29,11 @@ public class DocumentPdfService {
             throw new CustomException(ErrorCode.DOCUMENT_NOT_FOUND);
         }
 
-        Path pdfFile = PDF_DIR.resolve(document.getStorageKey());
-        if (!Files.exists(pdfFile)) {
+        Path pdfFile = PDF_DIR.resolve(document.getStorageKey()).normalize();
+        if (!pdfFile.startsWith(PDF_DIR)) {
+            throw new CustomException(ErrorCode.INVALID_INPUT);
+        }
+        if (!Files.exists(pdfFile) || !Files.isRegularFile(pdfFile)) {
             throw new CustomException(ErrorCode.DOCUMENT_NOT_FOUND);
         }
 

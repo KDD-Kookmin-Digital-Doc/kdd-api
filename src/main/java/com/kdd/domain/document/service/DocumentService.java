@@ -32,8 +32,15 @@ public class DocumentService {
             throw new CustomException(ErrorCode.INVALID_INPUT);
         }
 
-        String contentType = file.getContentType();
-        if (contentType == null || !contentType.equals("application/pdf")) {
+        try {
+            byte[] header = new byte[5];
+            file.getInputStream().read(header);
+            if (header[0] != '%' || header[1] != 'P' || header[2] != 'D' || header[3] != 'F') {
+                throw new CustomException(ErrorCode.INVALID_FILE_TYPE);
+            }
+        } catch (CustomException e) {
+            throw e;
+        } catch (Exception e) {
             throw new CustomException(ErrorCode.INVALID_FILE_TYPE);
         }
 
@@ -66,7 +73,7 @@ public class DocumentService {
                 .category(category)
                 .source(DocumentSource.KMU)
                 .originalFilename(originalFileName)
-                .mimeType(contentType)
+                .mimeType("application/pdf")
                 .fileSize(file.getSize())
                 .status(status)
                 .build();

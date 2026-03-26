@@ -43,4 +43,12 @@ public class AuthSession extends BaseTimeEntity {
         this.refreshTokenHash = refreshTokenHash;
         this.expiresAt = expiresAt;
     }
+
+    public void revoke() {
+        this.revokedAt = LocalDateTime.now();
+    }
+
+    public void updateLastUsed() {
+        this.lastUsedAt = LocalDateTime.now();
+    }
 }

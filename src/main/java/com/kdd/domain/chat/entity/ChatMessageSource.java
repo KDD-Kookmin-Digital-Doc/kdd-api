@@ -44,6 +44,10 @@ public class ChatMessageSource {
     @Builder
     public ChatMessageSource(ChatMessage message, Document document, DocumentChunk documentChunk,
                              String chunkText, Integer page) {
+        if (document != null && documentChunk != null
+                && !document.getId().equals(documentChunk.getDocument().getId())) {
+            throw new IllegalArgumentException("document와 documentChunk의 문서가 일치하지 않습니다.");
+        }
         this.message = message;
         this.document = document;
         this.documentChunk = documentChunk;
