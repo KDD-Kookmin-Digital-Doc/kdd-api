@@ -32,10 +32,10 @@ public class DocumentService {
             throw new CustomException(ErrorCode.INVALID_INPUT);
         }
 
-        try {
+        try (var inputStream = file.getInputStream()) {
             byte[] header = new byte[5];
-            file.getInputStream().read(header);
-            if (header[0] != '%' || header[1] != 'P' || header[2] != 'D' || header[3] != 'F') {
+            int bytesRead = inputStream.readNBytes(header, 0, 5);
+            if (bytesRead < 4 || header[0] != '%' || header[1] != 'P' || header[2] != 'D' || header[3] != 'F') {
                 throw new CustomException(ErrorCode.INVALID_FILE_TYPE);
             }
         } catch (CustomException e) {
