@@ -92,7 +92,7 @@ public class Document extends BaseTimeEntity {
         this.fileSize = fileSize;
         this.viewCount = 0;
         this.isNotice = false;
-        this.status = status != null ? status : DocumentStatus.PENDING;
+        this.status = status != null ? status : DocumentStatus.UPLOADED;
     }
 
     public void updateStatus(DocumentStatus status) {
