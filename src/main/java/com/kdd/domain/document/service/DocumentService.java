@@ -1,15 +1,18 @@
 package com.kdd.domain.document.service;
 
+import com.kdd.domain.document.dto.DocumentListResponse;
 import com.kdd.domain.document.dto.DocumentResponse;
 import com.kdd.domain.document.dto.DocumentStatusResponse;
 import com.kdd.domain.document.entity.*;
 import com.kdd.domain.document.repository.DocumentCategoryRepository;
 import com.kdd.domain.document.repository.DocumentChunkRepository;
 import com.kdd.domain.document.repository.DocumentRepository;
+import com.kdd.global.dto.PageResponse;
 import com.kdd.global.exception.CustomException;
 import com.kdd.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -95,9 +98,11 @@ public class DocumentService {
         return DocumentResponse.from(document);
     }
 
-    public List<DocumentResponse> getDocuments() {
-        return documentRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(DocumentResponse::from).toList();
+    public PageResponse<DocumentListResponse> getDocuments(int page, int size) {
+        return PageResponse.from(
+                documentRepository.findAllActive(PageRequest.of(page, size)),
+                DocumentListResponse::from
+        );
     }
 
     public DocumentStatusResponse getDocumentStatus(Long documentId) {
@@ -113,7 +118,7 @@ public class DocumentService {
         if (document.getStatus() == DocumentStatus.PROCESSING) {
             throw new CustomException(ErrorCode.DOCUMENT_ALREADY_PROCESSING);
         }
-        document.updateStatus(DocumentStatus.PENDING);
+        document.updateStatus(DocumentStatus.REPROCESSING);
         return DocumentStatusResponse.from(document);
     }
 

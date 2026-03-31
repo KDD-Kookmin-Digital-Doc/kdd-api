@@ -1,8 +1,9 @@
 package com.kdd.domain.document.entity;
 
 public enum DocumentStatus {
-    PENDING,
+    UPLOADED,
     PROCESSING,
     COMPLETED,
-    FAILED
+    FAILED,
+    REPROCESSING
 }

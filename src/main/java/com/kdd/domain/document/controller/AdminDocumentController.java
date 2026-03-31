@@ -1,10 +1,12 @@
 package com.kdd.domain.document.controller;
 
+import com.kdd.domain.document.dto.DocumentListResponse;
 import com.kdd.domain.document.dto.DocumentResponse;
 import com.kdd.domain.document.dto.DocumentStatusResponse;
 import com.kdd.domain.document.service.DocumentPdfService;
 import com.kdd.domain.document.service.DocumentService;
 import com.kdd.global.dto.ApiResponse;
+import com.kdd.global.dto.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -13,8 +15,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.util.List;
 
 @Tag(name = "Admin - Document", description = "관리자 문서 관리 API")
 @RestController
@@ -36,8 +36,10 @@ public class AdminDocumentController {
 
     @Operation(summary = "관리자 문서 목록 조회", description = "관리자가 문서 목록을 조회한다.")
     @GetMapping
-    public ResponseEntity<ApiResponse<List<DocumentResponse>>> getDocuments() {
-        return ResponseEntity.ok(ApiResponse.ok(documentService.getDocuments()));
+    public ResponseEntity<ApiResponse<PageResponse<DocumentListResponse>>> getDocuments(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.ok(documentService.getDocuments(page, size)));
     }
 
     @Operation(summary = "문서 처리 상태 조회", description = "업로드 후 파싱/임베딩 처리 상태를 확인한다.")
