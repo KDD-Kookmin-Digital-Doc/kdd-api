@@ -2,7 +2,7 @@
 
 > **KDD (Kookmin Digital Doc)** — 국민대학교 학칙·학사규정 RAG 챗봇 백엔드
 >
-> Spring Boot 3.4.3 / Java 17 / PostgreSQL 16 / Redis 7
+> Spring Boot 3.4.3 / Java 17 / PostgreSQL 16
 
 ## 프로젝트 구조
 
@@ -13,11 +13,11 @@
 ```bash
 # 1. 환경변수 설정
 cp .env.example .env
-# GEMINI_API_KEY, GOOGLE_CLIENT_ID, JWT_SECRET 값을 채워넣으세요
+# GEMINI_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, JWT_SECRET 값을 채워넣으세요
 # JWT_SECRET 생성: openssl rand -hex 32
 
-# 2. 인프라 (DB, Redis)
-docker compose up -d postgres redis
+# 2. 인프라 (DB)
+docker compose up -d postgres
 
 # 3. 서버
 ./gradlew bootRun
@@ -36,6 +36,6 @@ docker compose up -d postgres redis
 # 1. 환경변수 설정 (.env에 실제 값 입력)
 cp .env.example .env
 
-# 2. 전체 서비스 실행 (DB, Redis, App)
+# 2. 전체 서비스 실행 (DB, App)
 docker compose -f docker-compose.prod.yml up --build -d
 ```

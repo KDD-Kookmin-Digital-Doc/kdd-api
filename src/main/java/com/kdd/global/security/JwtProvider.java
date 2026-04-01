@@ -52,22 +52,19 @@ public class JwtProvider {
                 .getPayload();
     }
 
-    public Long getUserIdFromToken(String token) {
-        Claims claims = validateToken(token);
-        return Long.parseLong(claims.getSubject());
-    }
-
-    public String getRoleFromToken(String token) {
-        Claims claims = validateToken(token);
-        return claims.get("role", String.class);
-    }
-
     private byte[] hexStringToByteArray(String hex) {
+        if (hex == null || hex.length() % 2 != 0) {
+            throw new IllegalArgumentException("JWT secret must be a valid hex string with even length");
+        }
         int len = hex.length();
         byte[] data = new byte[len / 2];
         for (int i = 0; i < len; i += 2) {
-            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
-                    + Character.digit(hex.charAt(i + 1), 16));
+            int high = Character.digit(hex.charAt(i), 16);
+            int low = Character.digit(hex.charAt(i + 1), 16);
+            if (high == -1 || low == -1) {
+                throw new IllegalArgumentException("JWT secret contains non-hex characters");
+            }
+            data[i / 2] = (byte) ((high << 4) + low);
         }
         return data;
     }

@@ -11,7 +11,9 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "users")
+@Table(name = "users", indexes = {
+        @Index(name = "idx_user_user_type", columnList = "user_type")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class User {
@@ -50,7 +52,7 @@ public class User {
     public User(String email, String name, Role role) {
         this.email = email;
         this.name = name;
-        this.role = role;
+        this.role = (role == null) ? Role.USER : role;
         this.userType = UserType.STUDENT;
         this.isActive = true;
         this.isProfileCompleted = false;

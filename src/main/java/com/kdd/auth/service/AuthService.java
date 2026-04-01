@@ -1,7 +1,6 @@
 package com.kdd.auth.service;
 
 import com.kdd.auth.dto.GoogleUserInfo;
-import com.kdd.auth.dto.LoginResponse;
 import com.kdd.auth.entity.AuthSession;
 import com.kdd.auth.repository.AuthSessionRepository;
 import com.kdd.global.error.BusinessException;
@@ -56,15 +55,13 @@ public class AuthService {
             throw new BusinessException(ErrorCode.ACCOUNT_DEACTIVATED);
         }
 
-        boolean isNewUser = !user.isProfileCompleted();
-
         String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getRole().name());
         String refreshToken = jwtProvider.generateRefreshToken();
 
         revokeExistingSessions(user);
         saveAuthSession(user, refreshToken);
 
-        return new LoginResult(accessToken, refreshToken, isNewUser);
+        return new LoginResult(accessToken, refreshToken, user.isProfileCompleted());
     }
 
     private void validateDomain(String email) {
@@ -124,6 +121,6 @@ public class AuthService {
         }
     }
 
-    public record LoginResult(String accessToken, String refreshToken, boolean isNewUser) {
+    public record LoginResult(String accessToken, String refreshToken, boolean isProfileCompleted) {
     }
 }

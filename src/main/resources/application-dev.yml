@@ -1,5 +1,16 @@
 spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/kdd
+    username: kdd
+    password: kdd
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: true
+
+app:
+  google:
+    redirect-uri: http://localhost:3000/auth/callback
+  cors:
+    allowed-origins: http://localhost:3000
+    secure-cookie: false

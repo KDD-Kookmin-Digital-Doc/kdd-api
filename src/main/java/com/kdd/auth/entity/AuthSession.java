@@ -12,7 +12,10 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "auth_sessions")
+@Table(name = "auth_sessions", indexes = {
+        @Index(name = "idx_auth_session_user_id", columnList = "user_id"),
+        @Index(name = "idx_auth_session_expires_at", columnList = "expires_at")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AuthSession {
@@ -53,7 +56,9 @@ public class AuthSession {
     }
 
     public void revoke() {
-        this.revokedAt = LocalDateTime.now();
+        if (this.revokedAt == null) {
+            this.revokedAt = LocalDateTime.now();
+        }
     }
 
     public void updateLastUsedAt() {

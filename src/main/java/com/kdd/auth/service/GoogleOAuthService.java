@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.time.Duration;
 import java.util.Collections;
@@ -65,9 +66,12 @@ public class GoogleOAuthService {
             return new GoogleUserInfo(payload.getEmail(), (String) payload.get("name"));
         } catch (BusinessException e) {
             throw e;
+        } catch (WebClientResponseException e) {
+            log.warn("Google OAuth code exchange failed: {}", e.getMessage());
+            throw new BusinessException(ErrorCode.INVALID_AUTH_CODE);
         } catch (Exception e) {
             log.error("Google OAuth verification failed", e);
-            throw new BusinessException(ErrorCode.INVALID_AUTH_CODE);
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR);
         }
     }
 

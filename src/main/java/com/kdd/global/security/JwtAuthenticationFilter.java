@@ -1,5 +1,6 @@
 package com.kdd.global.security;
 
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,8 +34,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (token != null) {
             try {
-                Long userId = jwtProvider.getUserIdFromToken(token);
-                String role = jwtProvider.getRoleFromToken(token);
+                Claims claims = jwtProvider.validateToken(token);
+                Long userId = Long.parseLong(claims.getSubject());
+                String role = claims.get("role", String.class);
+
+                if (role == null) {
+                    log.debug("JWT has no role claim, skipping authentication");
+                    filterChain.doFilter(request, response);
+                    return;
+                }
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
@@ -53,7 +61,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.startsWith("/auth/");
+        return path.equals("/auth/google") || path.equals("/auth/refresh");
     }
 
     private String resolveToken(HttpServletRequest request) {
