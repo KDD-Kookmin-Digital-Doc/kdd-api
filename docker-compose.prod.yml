@@ -18,19 +18,6 @@ services:
     networks:
       - kdd-network
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "127.0.0.1:6379:6379"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - kdd-network
-
   app:
     build: .
     ports:
@@ -42,14 +29,11 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/kdd
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
-      REDIS_HOST: redis
     restart: unless-stopped
     volumes:
       - ./uploads:/app/uploads
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     networks:
       - kdd-network
