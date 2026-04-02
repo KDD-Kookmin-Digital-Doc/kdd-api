@@ -21,9 +21,7 @@ public class DocumentResponse {
     private String mimeType;
     private Long fileSize;
     private String author;
-    private LocalDateTime publishedAt;
     private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
 
     public static DocumentResponse from(Document document) {
         if (document == null) {
@@ -41,9 +39,7 @@ public class DocumentResponse {
                 .mimeType(document.getMimeType())
                 .fileSize(document.getFileSize())
                 .author(document.getAuthor())
-                .publishedAt(document.getPublishedAt())
                 .createdAt(document.getCreatedAt())
-                .updatedAt(document.getUpdatedAt())
                 .build();
     }
 }
