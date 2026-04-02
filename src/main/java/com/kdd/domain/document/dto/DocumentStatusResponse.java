@@ -7,15 +7,13 @@ import lombok.Getter;
 @Getter
 @Builder
 public class DocumentStatusResponse {
-    private Long id;
-    private String title;
+    private Long documentId;
     private String status;
 
     public static DocumentStatusResponse from(Document document) {
         return DocumentStatusResponse.builder()
-                .id(document.getId())
-                .title(document.getTitle())
-                .status(document.getStatus().name())
+                .documentId(document.getId())
+                .status(document.getStatus().name().toLowerCase())
                 .build();
     }
 }

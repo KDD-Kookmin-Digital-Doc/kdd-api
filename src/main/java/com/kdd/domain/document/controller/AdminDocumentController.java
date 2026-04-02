@@ -1,11 +1,9 @@
 package com.kdd.domain.document.controller;
 
-import com.kdd.domain.document.dto.DocumentCategoryUpdateRequest;
-import com.kdd.domain.document.dto.DocumentListResponse;
-import com.kdd.domain.document.dto.DocumentResponse;
-import com.kdd.domain.document.dto.DocumentStatusResponse;
+import com.kdd.domain.document.dto.*;
 import com.kdd.domain.document.service.DocumentPdfService;
 import com.kdd.domain.document.service.DocumentService;
+import com.kdd.global.dto.MessageResponse;
 import com.kdd.global.dto.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,9 +28,9 @@ public class AdminDocumentController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<DocumentResponse> upload(
             @RequestPart("file") MultipartFile file,
-            @RequestParam(value = "title", required = false) String title,
-            @RequestParam(value = "categoryId") Long categoryId) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(documentService.upload(file, title, categoryId));
+            @RequestPart("data") DocumentUploadRequest data) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(documentService.upload(file, data.getTitle(), data.getCategoryId()));
     }
 
     @Operation(summary = "관리자 문서 목록 조회", description = "관리자가 문서 목록을 조회한다.")
@@ -65,9 +63,9 @@ public class AdminDocumentController {
 
     @Operation(summary = "문서 삭제", description = "관리자가 문서를 삭제한다.")
     @DeleteMapping("/{documentId}")
-    public ResponseEntity<Void> delete(@PathVariable Long documentId) {
+    public ResponseEntity<MessageResponse> delete(@PathVariable Long documentId) {
         documentService.delete(documentId);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(MessageResponse.of("문서가 삭제되었습니다."));
     }
 
     @Operation(summary = "문서 PDF 조회", description = "공지 본문 + 첨부파일을 병합한 PDF를 반환한다.")
