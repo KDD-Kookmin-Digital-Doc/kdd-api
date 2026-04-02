@@ -52,3 +52,4 @@ temp/
 !gradle/wrapper/gradle-wrapper.jar
 hs_err_pid*
 replay_pid*
+pdf-cache/

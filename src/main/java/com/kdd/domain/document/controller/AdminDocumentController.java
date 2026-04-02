@@ -1,8 +1,10 @@
 package com.kdd.domain.document.controller;
 
+import com.kdd.domain.document.dto.DocumentCategoryUpdateRequest;
 import com.kdd.domain.document.dto.DocumentListResponse;
 import com.kdd.domain.document.dto.DocumentResponse;
 import com.kdd.domain.document.dto.DocumentStatusResponse;
+import jakarta.validation.Valid;
 import com.kdd.domain.document.service.DocumentPdfService;
 import com.kdd.domain.document.service.DocumentService;
 import com.kdd.global.dto.ApiResponse;
@@ -40,6 +42,14 @@ public class AdminDocumentController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.ok(documentService.getDocuments(page, size)));
+    }
+
+    @Operation(summary = "문서 카테고리 수정", description = "관리자가 문서의 카테고리를 변경한다.")
+    @PatchMapping("/{documentId}/category")
+    public ResponseEntity<ApiResponse<DocumentResponse>> updateCategory(
+            @PathVariable Long documentId,
+            @Valid @RequestBody DocumentCategoryUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(documentService.updateCategory(documentId, request.getCategoryId())));
     }
 
     @Operation(summary = "문서 처리 상태 조회", description = "업로드 후 파싱/임베딩 처리 상태를 확인한다.")

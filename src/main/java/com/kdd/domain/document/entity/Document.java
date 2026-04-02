@@ -100,6 +100,11 @@ public class Document extends BaseTimeEntity {
         this.status = status;
     }
 
+    public void updateCategory(DocumentCategory category) {
+        if (category == null) throw new IllegalArgumentException("category must not be null");
+        this.category = category;
+    }
+
     public void softDelete() {
         this.deletedAt = LocalDateTime.now();
     }

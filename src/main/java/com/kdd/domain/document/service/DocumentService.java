@@ -105,6 +105,16 @@ public class DocumentService {
         );
     }
 
+    @Transactional
+    public DocumentResponse updateCategory(Long documentId, Long categoryId) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
+        DocumentCategory category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new CustomException(ErrorCode.CATEGORY_NOT_FOUND));
+        document.updateCategory(category);
+        return DocumentResponse.from(document);
+    }
+
     public DocumentStatusResponse getDocumentStatus(Long documentId) {
         Document document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
