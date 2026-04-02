@@ -10,6 +10,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "chat_messages", indexes = {
@@ -38,6 +40,9 @@ public class ChatMessage {
 
     @Column(precision = 5, scale = 2)
     private BigDecimal confidenceScore;
+
+    @OneToMany(mappedBy = "message", cascade = CascadeType.REMOVE, orphanRemoval = true)
+    private List<ChatAttachment> attachments = new ArrayList<>();
 
     @CreatedDate
     @Column(updatable = false)
