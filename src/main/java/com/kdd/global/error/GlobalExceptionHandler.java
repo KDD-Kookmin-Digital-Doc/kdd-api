@@ -2,6 +2,7 @@ package com.kdd.global.error;
 
 import com.kdd.global.response.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,9 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @Value("${app.cors.secure-cookie}")
+    private boolean secureCookie;
+
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
         ErrorCode errorCode = e.getErrorCode();
@@ -25,6 +29,8 @@ public class GlobalExceptionHandler {
         if (errorCode == ErrorCode.INVALID_REFRESH_TOKEN) {
             ResponseCookie expiredCookie = ResponseCookie.from("refreshToken", "")
                     .httpOnly(true)
+                    .secure(secureCookie)
+                    .sameSite("Strict")
                     .path("/auth")
                     .maxAge(0)
                     .build();
