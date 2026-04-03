@@ -21,4 +21,6 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, Long> 
             @Param("now") LocalDateTime now);
 
     List<AuthSession> findAllByUserAndRevokedAtIsNull(User user);
+
+    List<AuthSession> findAllByUserIdAndRevokedAtIsNull(Long userId);
 }
