@@ -10,7 +10,7 @@ spring:
 
 app:
   google:
-    redirect-uri: http://localhost:3000/auth/callback
+    redirect-uri: ${GOOGLE_REDIRECT_URI}
   cors:
     allowed-origins: http://localhost:3000
     secure-cookie: false
