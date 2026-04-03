@@ -121,6 +121,37 @@ public class AuthService {
         }
     }
 
+    @Transactional
+    public RefreshResult refresh(String refreshToken) {
+        String hash = hashToken(refreshToken);
+
+        AuthSession session = authSessionRepository
+                .findValidSessionForUpdate(hash, LocalDateTime.now())
+                .orElseThrow(() -> {
+                    log.warn("Invalid refresh token attempt: hash={}", hash);
+                    return new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+                });
+
+        User user = session.getUser();
+
+        if (!user.isActive()) {
+            log.warn("Refresh attempt by deactivated account: userId={}", user.getId());
+            throw new BusinessException(ErrorCode.ACCOUNT_DEACTIVATED);
+        }
+
+        String newAccessToken = jwtProvider.generateAccessToken(user.getId(), user.getRole().name());
+        String newRefreshToken = jwtProvider.generateRefreshToken();
+
+        session.updateLastUsedAt();
+        session.revoke();
+        saveAuthSession(user, newRefreshToken);
+
+        return new RefreshResult(newAccessToken, newRefreshToken);
+    }
+
     public record LoginResult(String accessToken, String refreshToken, boolean isProfileCompleted) {
+    }
+
+    public record RefreshResult(String accessToken, String refreshToken) {
     }
 }

@@ -2,14 +2,23 @@ package com.kdd.auth.repository;
 
 import com.kdd.auth.entity.AuthSession;
 import com.kdd.user.entity.User;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 public interface AuthSessionRepository extends JpaRepository<AuthSession, Long> {
 
-    Optional<AuthSession> findByRefreshTokenHashAndRevokedAtIsNull(String refreshTokenHash);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM AuthSession s JOIN FETCH s.user WHERE s.refreshTokenHash = :hash AND s.revokedAt IS NULL AND s.expiresAt > :now")
+    Optional<AuthSession> findValidSessionForUpdate(
+            @Param("hash") String hash,
+            @Param("now") LocalDateTime now);
 
     List<AuthSession> findAllByUserAndRevokedAtIsNull(User user);
 }
