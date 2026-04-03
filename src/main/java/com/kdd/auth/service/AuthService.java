@@ -64,6 +64,41 @@ public class AuthService {
         return new LoginResult(accessToken, refreshToken, user.isProfileCompleted());
     }
 
+    @Transactional
+    public RefreshResult refresh(String refreshToken) {
+        String hash = hashToken(refreshToken);
+
+        AuthSession session = authSessionRepository
+                .findValidSessionForUpdate(hash, LocalDateTime.now())
+                .orElseThrow(() -> {
+                    log.warn("Invalid refresh token attempt: hash={}", hash);
+                    return new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+                });
+
+        User user = session.getUser();
+
+        if (!user.isActive()) {
+            log.warn("Refresh attempt by deactivated account: userId={}", user.getId());
+            throw new BusinessException(ErrorCode.ACCOUNT_DEACTIVATED);
+        }
+
+        String newAccessToken = jwtProvider.generateAccessToken(user.getId(), user.getRole().name());
+        String newRefreshToken = jwtProvider.generateRefreshToken();
+
+        session.updateLastUsedAt();
+        session.revoke();
+        saveAuthSession(user, newRefreshToken);
+
+        return new RefreshResult(newAccessToken, newRefreshToken);
+    }
+
+    @Transactional
+    public void logout(Long userId) {
+        authSessionRepository.findAllByUserIdAndRevokedAtIsNull(userId)
+                .forEach(AuthSession::revoke);
+        log.info("User logged out: userId={}", userId);
+    }
+
     private void validateDomain(String email) {
         if (!email.endsWith("@" + allowedDomain)) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED_DOMAIN);
@@ -119,34 +154,6 @@ public class AuthService {
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-256 algorithm not available", e);
         }
-    }
-
-    @Transactional
-    public RefreshResult refresh(String refreshToken) {
-        String hash = hashToken(refreshToken);
-
-        AuthSession session = authSessionRepository
-                .findValidSessionForUpdate(hash, LocalDateTime.now())
-                .orElseThrow(() -> {
-                    log.warn("Invalid refresh token attempt: hash={}", hash);
-                    return new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
-                });
-
-        User user = session.getUser();
-
-        if (!user.isActive()) {
-            log.warn("Refresh attempt by deactivated account: userId={}", user.getId());
-            throw new BusinessException(ErrorCode.ACCOUNT_DEACTIVATED);
-        }
-
-        String newAccessToken = jwtProvider.generateAccessToken(user.getId(), user.getRole().name());
-        String newRefreshToken = jwtProvider.generateRefreshToken();
-
-        session.updateLastUsedAt();
-        session.revoke();
-        saveAuthSession(user, newRefreshToken);
-
-        return new RefreshResult(newAccessToken, newRefreshToken);
     }
 
     public record LoginResult(String accessToken, String refreshToken, boolean isProfileCompleted) {
