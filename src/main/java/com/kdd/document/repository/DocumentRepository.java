@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
@@ -16,5 +17,5 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     Page<Document> findAllActive(Pageable pageable);
 
     @Query("SELECT d FROM Document d WHERE d.id = :id AND d.deletedAt IS NULL")
-    Optional<Document> findActiveById(Long id);
+    Optional<Document> findActiveById(@Param("id") Long id);
 }

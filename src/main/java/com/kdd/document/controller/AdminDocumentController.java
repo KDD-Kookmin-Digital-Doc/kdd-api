@@ -26,7 +26,7 @@ public class AdminDocumentController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<DocumentDetailResponse> upload(
             @RequestPart("file") MultipartFile file,
-            @RequestPart("data") DocumentUploadRequest data) {
+            @Valid @RequestPart("data") DocumentUploadRequest data) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(documentService.upload(file, data));
     }

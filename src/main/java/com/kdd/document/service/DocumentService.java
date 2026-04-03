@@ -13,6 +13,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -62,6 +63,10 @@ public class DocumentService {
             content = content.replace("\u0000", "");
         }
 
+        if (status == DocumentStatus.COMPLETED && content.isBlank()) {
+            status = DocumentStatus.FAILED;
+        }
+
         Document document = Document.builder()
                 .title(title)
                 .content(content)
@@ -83,7 +88,7 @@ public class DocumentService {
 
     public PageResponse<DocumentListResponse> getDocuments(int page, int size) {
         return PageResponse.from(
-                documentRepository.findAllActive(PageRequest.of(page, size)),
+                documentRepository.findAllActive(PageRequest.of(page, size, Sort.by("createdAt", "id").descending())),
                 DocumentListResponse::from
         );
     }
