@@ -94,8 +94,7 @@ public class AuthService {
 
     @Transactional
     public void logout(Long userId) {
-        authSessionRepository.findAllByUserIdAndRevokedAtIsNull(userId)
-                .forEach(AuthSession::revoke);
+        authSessionRepository.revokeAllByUserId(userId, LocalDateTime.now());
         log.info("User logged out: userId={}", userId);
     }
 
