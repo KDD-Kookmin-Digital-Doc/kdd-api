@@ -2,6 +2,8 @@ package com.kdd.global.error;
 
 import com.kdd.global.response.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -17,9 +19,19 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
         ErrorCode errorCode = e.getErrorCode();
         log.warn("BusinessException: {}", errorCode.getMessage());
-        return ResponseEntity
-                .status(errorCode.getStatus())
-                .body(new ErrorResponse(errorCode.getCode(), errorCode.getMessage()));
+
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(errorCode.getStatus());
+
+        if (errorCode == ErrorCode.INVALID_REFRESH_TOKEN) {
+            ResponseCookie expiredCookie = ResponseCookie.from("refreshToken", "")
+                    .httpOnly(true)
+                    .path("/auth")
+                    .maxAge(0)
+                    .build();
+            builder.header(HttpHeaders.SET_COOKIE, expiredCookie.toString());
+        }
+
+        return builder.body(new ErrorResponse(errorCode.getCode(), errorCode.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
