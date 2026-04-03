@@ -5,6 +5,7 @@ import com.kdd.user.entity.User;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -22,5 +23,7 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, Long> 
 
     List<AuthSession> findAllByUserAndRevokedAtIsNull(User user);
 
-    List<AuthSession> findAllByUserIdAndRevokedAtIsNull(Long userId);
+    @Modifying
+    @Query("UPDATE AuthSession s SET s.revokedAt = :now WHERE s.user.id = :userId AND s.revokedAt IS NULL")
+    void revokeAllByUserId(@Param("userId") Long userId, @Param("now") LocalDateTime now);
 }
