@@ -1,0 +1,31 @@
+package com.kdd.document.dto;
+
+import com.kdd.document.entity.Document;
+
+import java.time.LocalDateTime;
+
+public record DocumentDetailResponse(
+        Long id,
+        String title,
+        Long categoryId,
+        String categoryName,
+        String status,
+        String source,
+        String originalFilename,
+        Long fileSize,
+        LocalDateTime createdAt
+) {
+    public static DocumentDetailResponse from(Document document) {
+        return new DocumentDetailResponse(
+                document.getId(),
+                document.getTitle(),
+                document.getCategory().getId(),
+                document.getCategory().getName(),
+                document.getStatus().getValue(),
+                document.getSource().name(),
+                document.getOriginalFilename(),
+                document.getFileSize(),
+                document.getCreatedAt()
+        );
+    }
+}
