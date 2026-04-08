@@ -11,4 +11,7 @@ public class DocumentUploadRequest {
 
     @NotNull(message = "categoryId는 필수입니다.")
     private Long categoryId;
+
+    @NotNull(message = "source는 필수입니다.")
+    private String source;
 }

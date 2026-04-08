@@ -71,7 +71,7 @@ public class DocumentService {
                 .title(title)
                 .content(content)
                 .category(category)
-                .source(DocumentSource.KMU)
+                .source(DocumentSource.from(request.getSource()))
                 .originalFilename(originalFilename)
                 .mimeType("application/pdf")
                 .fileSize(file.getSize())
