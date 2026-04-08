@@ -71,7 +71,7 @@ public class DocumentService {
                 .title(title)
                 .content(content)
                 .category(category)
-                .source(DocumentSource.from(request.getSource()))
+                .source(parseSource(request.getSource()))
                 .originalFilename(originalFilename)
                 .mimeType("application/pdf")
                 .fileSize(file.getSize())
@@ -110,7 +110,7 @@ public class DocumentService {
     @Transactional
     public DocumentReprocessResponse reprocess(Long documentId) {
         Document document = findDocumentOrThrow(documentId);
-        if (document.getStatus() == DocumentStatus.PROCESSING) {
+        if (document.getStatus() == DocumentStatus.PROCESSING || document.getStatus() == DocumentStatus.REPROCESSING) {
             throw new BusinessException(ErrorCode.DOCUMENT_ALREADY_PROCESSING);
         }
         document.updateStatus(DocumentStatus.REPROCESSING);
@@ -127,6 +127,14 @@ public class DocumentService {
     private Document findDocumentOrThrow(Long documentId) {
         return documentRepository.findActiveById(documentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND));
+    }
+
+    private DocumentSource parseSource(String source) {
+        try {
+            return DocumentSource.from(source);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
     }
 
     private void validatePdf(MultipartFile file) {
