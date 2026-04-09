@@ -116,7 +116,7 @@ public class DocumentService {
 
         return PageResponse.from(
                 documentRepository.findByCategoryIds(categoryIds,
-                        PageRequest.of(page, pageSize, Sort.by("createdAt", "id").descending())),
+                        PageRequest.of(page, pageSize, Sort.by("updatedAt", "id").descending())),
                 DocumentByCategoryResponse::from
         );
     }
