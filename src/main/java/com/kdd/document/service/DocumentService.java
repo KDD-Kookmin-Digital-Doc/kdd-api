@@ -86,6 +86,47 @@ public class DocumentService {
         return DocumentDetailResponse.from(document);
     }
 
+    public List<CategoryTreeResponse> getCategoryTree() {
+        List<DocumentCategory> all = categoryRepository.findAllOrdered();
+
+        // parent가 null인 최상위 카테고리부터 트리 구성
+        return all.stream()
+                .filter(c -> c.getParent() == null)
+                .map(root -> buildTree(root, all))
+                .toList();
+    }
+
+    private CategoryTreeResponse buildTree(DocumentCategory parent, List<DocumentCategory> all) {
+        List<CategoryTreeResponse> children = all.stream()
+                .filter(c -> c.getParent() != null && c.getParent().getId().equals(parent.getId()))
+                .map(child -> buildTree(child, all))
+                .toList();
+        return CategoryTreeResponse.from(parent, children);
+    }
+
+    public PageResponse<DocumentByCategoryResponse> getDocumentsByCategory(Long categoryId, int page, int pageSize) {
+        categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
+
+        // 해당 카테고리 + 하위 카테고리 ID 수집
+        List<DocumentCategory> all = categoryRepository.findAllOrdered();
+        List<Long> categoryIds = new ArrayList<>();
+        collectCategoryIds(categoryId, all, categoryIds);
+
+        return PageResponse.from(
+                documentRepository.findByCategoryIds(categoryIds,
+                        PageRequest.of(page, pageSize, Sort.by("createdAt", "id").descending())),
+                DocumentByCategoryResponse::from
+        );
+    }
+
+    private void collectCategoryIds(Long parentId, List<DocumentCategory> all, List<Long> result) {
+        result.add(parentId);
+        all.stream()
+                .filter(c -> c.getParent() != null && c.getParent().getId().equals(parentId))
+                .forEach(child -> collectCategoryIds(child.getId(), all, result));
+    }
+
     public PageResponse<DocumentListResponse> getDocuments(int page, int size) {
         return PageResponse.from(
                 documentRepository.findAllActive(PageRequest.of(page, size, Sort.by("createdAt", "id").descending())),
