@@ -9,9 +9,9 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum AcademicStatus {
 
-    ENROLLED("ENROLLED"),
-    ON_LEAVE("ON_LEAVE"),
-    RETURNING("RETURNING");
+    ENROLLED("enrolled"),
+    ON_LEAVE("on_leave"),
+    RETURNING("returning");
 
     private final String value;
 

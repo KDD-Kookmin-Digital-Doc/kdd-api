@@ -43,7 +43,7 @@ public class StaffProfile {
     public StaffProfile(User user, StaffDepartment department, String jobDescription) {
         this.user = user;
         this.department = department;
-        this.jobDescription = jobDescription;
+        this.jobDescription = (jobDescription == null || jobDescription.isBlank()) ? null : jobDescription;
     }
 
     public void update(StaffDepartment department, String jobDescription) {
