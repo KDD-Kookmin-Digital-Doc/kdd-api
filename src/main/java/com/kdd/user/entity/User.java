@@ -57,4 +57,15 @@ public class User {
         this.isActive = true;
         this.isProfileCompleted = false;
     }
+
+    public void completeProfile(UserType userType) {
+        this.userType = userType;
+        this.isProfileCompleted = true;
+    }
+
+    public void updateName(String name) {
+        if (name != null && !name.isBlank()) {
+            this.name = name;
+        }
+    }
 }
