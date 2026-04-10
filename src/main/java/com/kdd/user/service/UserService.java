@@ -10,6 +10,7 @@ import com.kdd.user.repository.StaffProfileRepository;
 import com.kdd.user.repository.StudentProfileRepository;
 import com.kdd.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,9 +30,11 @@ public class UserService {
 
         if (user.isProfileCompleted()) {
             if (user.getUserType() == UserType.STUDENT) {
-                studentProfile = studentProfileRepository.findByUserId(userId).orElse(null);
+                studentProfile = studentProfileRepository.findByUserId(userId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.PROFILE_NOT_COMPLETED));
             } else if (user.getUserType() == UserType.STAFF) {
-                staffProfile = staffProfileRepository.findByUserId(userId).orElse(null);
+                staffProfile = staffProfileRepository.findByUserId(userId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.PROFILE_NOT_COMPLETED));
             }
         }
 
@@ -53,12 +56,16 @@ public class UserService {
         StudentProfile studentProfile = null;
         StaffProfile staffProfile = null;
 
-        if (userType == UserType.STUDENT) {
-            validateStudentFields(request);
-            studentProfile = createStudentProfile(user, request);
-        } else {
-            validateStaffFields(request);
-            staffProfile = createStaffProfile(user, request);
+        try {
+            if (userType == UserType.STUDENT) {
+                validateStudentFields(request);
+                studentProfile = createStudentProfile(user, request);
+            } else {
+                validateStaffFields(request);
+                staffProfile = createStaffProfile(user, request);
+            }
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.PROFILE_ALREADY_COMPLETED);
         }
 
         return UserResponse.from(user, studentProfile, staffProfile);

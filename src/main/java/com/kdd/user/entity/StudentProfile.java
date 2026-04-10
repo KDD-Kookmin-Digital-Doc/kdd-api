@@ -63,7 +63,7 @@ public class StudentProfile {
         this.grade = grade;
         this.admissionYear = admissionYear;
         this.academicStatus = (academicStatus == null) ? AcademicStatus.ENROLLED : academicStatus;
-        this.additionalInfo = additionalInfo;
+        this.additionalInfo = (additionalInfo == null || additionalInfo.isBlank()) ? null : additionalInfo;
     }
 
     public void update(String studentId, StudentDepartment department, Short grade,

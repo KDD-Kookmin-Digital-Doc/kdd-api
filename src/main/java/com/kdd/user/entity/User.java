@@ -9,6 +9,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Entity
 @Table(name = "users", indexes = {
@@ -59,7 +60,7 @@ public class User {
     }
 
     public void completeProfile(UserType userType) {
-        this.userType = userType;
+        this.userType = Objects.requireNonNull(userType, "userType must not be null");
         this.isProfileCompleted = true;
     }
 

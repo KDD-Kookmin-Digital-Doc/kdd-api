@@ -7,7 +7,7 @@ public record CreateProfileRequest(
         @NotBlank(message = "이름은 필수입니다.")
         String name,
 
-        @NotNull(message = "사용자 유형은 필수입니다.")
+        @NotBlank(message = "사용자 유형은 필수입니다.")
         String userType,
 
         // 학생 전용
