@@ -7,6 +7,7 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 
 @Entity
 @Table(name = "chat_message_sources", indexes = {
@@ -30,6 +31,7 @@ public class ChatMessageSource {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "document_id", nullable = false)
+    @BatchSize(size = 50)
     private Document document;
 
     @ManyToOne(fetch = FetchType.LAZY)

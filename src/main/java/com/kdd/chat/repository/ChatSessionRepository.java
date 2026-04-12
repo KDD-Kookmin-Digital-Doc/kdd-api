@@ -14,6 +14,6 @@ public interface ChatSessionRepository extends JpaRepository<ChatSession, Long> 
 
     Page<ChatSession> findByUserIdAndTitleContainingOrderByCreatedAtDesc(Long userId, String keyword, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"messages", "messages.sources", "messages.sources.document"})
+    @EntityGraph(attributePaths = {"messages"})
     Optional<ChatSession> findWithMessagesById(Long id);
 }

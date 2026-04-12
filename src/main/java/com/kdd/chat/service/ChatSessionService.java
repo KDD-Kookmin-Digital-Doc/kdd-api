@@ -27,10 +27,12 @@ public class ChatSessionService {
     private final UserRepository userRepository;
 
     private static final DateTimeFormatter TITLE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+    private static final int MAX_PAGE_SIZE = 100;
 
     @Transactional
     public ChatSessionCreateResponse createSession(Long userId) {
-        User user = userRepository.getReferenceById(userId);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         String title = LocalDateTime.now().format(TITLE_FORMATTER);
 
         ChatSession session = ChatSession.builder()
@@ -61,10 +63,12 @@ public class ChatSessionService {
     }
 
     public ChatSessionDetailResponse getSessionDetail(Long sessionId, Long userId) {
-        ChatSession session = chatSessionRepository.findWithMessagesById(sessionId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
+        ChatSession session = findSessionOrThrow(sessionId);
         validateOwnership(session, userId);
-        return ChatSessionDetailResponse.from(session);
+
+        ChatSession detailedSession = chatSessionRepository.findWithMessagesById(sessionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
+        return ChatSessionDetailResponse.from(detailedSession);
     }
 
     @Transactional
@@ -95,7 +99,7 @@ public class ChatSessionService {
     }
 
     private void validatePageParams(int page, int size) {
-        if (page < 0 || size < 1) {
+        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
     }
