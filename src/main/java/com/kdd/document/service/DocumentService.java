@@ -86,7 +86,46 @@ public class DocumentService {
         return DocumentDetailResponse.from(document);
     }
 
+    public List<CategoryTreeResponse> getCategoryTree() {
+        List<DocumentCategory> all = categoryRepository.findAllOrdered();
+
+        // parent가 null인 최상위 카테고리부터 트리 구성
+        return all.stream()
+                .filter(c -> c.getParent() == null)
+                .map(root -> buildTree(root, all))
+                .toList();
+    }
+
+    private CategoryTreeResponse buildTree(DocumentCategory parent, List<DocumentCategory> all) {
+        List<CategoryTreeResponse> children = all.stream()
+                .filter(c -> c.getParent() != null && c.getParent().getId().equals(parent.getId()))
+                .map(child -> buildTree(child, all))
+                .toList();
+        return CategoryTreeResponse.from(parent, children);
+    }
+
+    public PageResponse<DocumentByCategoryResponse> getDocumentsByCategory(Long categoryId, int page, int pageSize) {
+        validatePageParams(page, pageSize);
+        categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
+
+        // 하위 카테고리가 존재하면 상위 카테고리이므로 조회 차단
+        List<DocumentCategory> all = categoryRepository.findAllOrdered();
+        boolean hasChildren = all.stream()
+                .anyMatch(c -> c.getParent() != null && c.getParent().getId().equals(categoryId));
+        if (hasChildren) {
+            throw new BusinessException(ErrorCode.PARENT_CATEGORY_NOT_ALLOWED);
+        }
+
+        return PageResponse.from(
+                documentRepository.findByCategoryIds(List.of(categoryId),
+                        PageRequest.of(page, pageSize, Sort.by("updatedAt", "id").descending())),
+                DocumentByCategoryResponse::from
+        );
+    }
+
     public PageResponse<DocumentListResponse> getDocuments(int page, int size) {
+        validatePageParams(page, size);
         return PageResponse.from(
                 documentRepository.findAllActive(PageRequest.of(page, size, Sort.by("createdAt", "id").descending())),
                 DocumentListResponse::from
@@ -127,6 +166,12 @@ public class DocumentService {
     private Document findDocumentOrThrow(Long documentId) {
         return documentRepository.findActiveById(documentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND));
+    }
+
+    private void validatePageParams(int page, int size) {
+        if (page < 0 || size < 1) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
     }
 
     private DocumentSource parseSource(String source) {
