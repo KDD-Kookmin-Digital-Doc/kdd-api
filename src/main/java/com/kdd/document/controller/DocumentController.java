@@ -27,7 +27,7 @@ public class DocumentController {
         return ResponseEntity.ok(Map.of("categories", documentService.getCategoryTree()));
     }
 
-    @Operation(summary = "카테고리 기반 문서 조회", description = "선택한 카테고리에 속한 문서 목록을 조회한다. 상위 카테고리 선택 시 하위 카테고리 문서도 포함.")
+    @Operation(summary = "카테고리 기반 문서 조회", description = "선택한 하위 카테고리에 속한 문서 목록을 조회한다. 상위 카테고리로 요청 시 에러를 반환한다.")
     @GetMapping("/by-category")
     public ResponseEntity<PageResponse<DocumentByCategoryResponse>> getDocumentsByCategory(
             @RequestParam Long categoryId,

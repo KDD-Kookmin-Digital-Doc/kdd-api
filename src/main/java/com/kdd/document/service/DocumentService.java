@@ -109,23 +109,19 @@ public class DocumentService {
         categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
 
-        // 해당 카테고리 + 하위 카테고리 ID 수집
+        // 하위 카테고리가 존재하면 상위 카테고리이므로 조회 차단
         List<DocumentCategory> all = categoryRepository.findAllOrdered();
-        List<Long> categoryIds = new ArrayList<>();
-        collectCategoryIds(categoryId, all, categoryIds);
+        boolean hasChildren = all.stream()
+                .anyMatch(c -> c.getParent() != null && c.getParent().getId().equals(categoryId));
+        if (hasChildren) {
+            throw new BusinessException(ErrorCode.PARENT_CATEGORY_NOT_ALLOWED);
+        }
 
         return PageResponse.from(
-                documentRepository.findByCategoryIds(categoryIds,
+                documentRepository.findByCategoryIds(List.of(categoryId),
                         PageRequest.of(page, pageSize, Sort.by("updatedAt", "id").descending())),
                 DocumentByCategoryResponse::from
         );
-    }
-
-    private void collectCategoryIds(Long parentId, List<DocumentCategory> all, List<Long> result) {
-        result.add(parentId);
-        all.stream()
-                .filter(c -> c.getParent() != null && c.getParent().getId().equals(parentId))
-                .forEach(child -> collectCategoryIds(child.getId(), all, result));
     }
 
     public PageResponse<DocumentListResponse> getDocuments(int page, int size) {

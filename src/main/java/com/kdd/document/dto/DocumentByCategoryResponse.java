@@ -8,6 +8,7 @@ public record DocumentByCategoryResponse(
         Long documentId,
         String title,
         String category,
+        LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
     public static DocumentByCategoryResponse from(Document document) {
@@ -15,6 +16,7 @@ public record DocumentByCategoryResponse(
                 document.getId(),
                 document.getTitle(),
                 document.getCategory().getName(),
+                document.getCreatedAt(),
                 document.getUpdatedAt()
         );
     }
