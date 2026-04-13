@@ -9,11 +9,12 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum AcademicStatus {
 
-    ENROLLED("enrolled"),
-    ON_LEAVE("on_leave"),
-    RETURNING("returning");
+    ENROLLED("enrolled", "재학생"),
+    ON_LEAVE("on_leave", "휴학생"),
+    RETURNING("returning", "복학생");
 
     private final String value;
+    private final String displayName;
 
     public static AcademicStatus from(String value) {
         for (AcademicStatus status : values()) {

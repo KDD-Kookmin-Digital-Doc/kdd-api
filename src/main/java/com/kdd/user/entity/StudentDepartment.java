@@ -9,10 +9,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum StudentDepartment {
 
-    SOFTWARE("software"),
-    AI("ai");
+    SOFTWARE("software", "소프트웨어학부"),
+    AI("ai", "AI학부");
 
     private final String value;
+    private final String displayName;
 
     public static StudentDepartment from(String value) {
         for (StudentDepartment dept : values()) {
