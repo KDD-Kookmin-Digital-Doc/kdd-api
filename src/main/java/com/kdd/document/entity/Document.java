@@ -102,6 +102,10 @@ public class Document {
         this.category = category;
     }
 
+    public void incrementViewCount() {
+        this.viewCount++;
+    }
+
     public void updateStatus(DocumentStatus status) {
         this.status = status;
     }
