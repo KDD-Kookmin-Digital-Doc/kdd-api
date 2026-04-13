@@ -8,8 +8,10 @@ import com.kdd.document.repository.DocumentRepository;
 import com.kdd.global.error.BusinessException;
 import com.kdd.global.error.ErrorCode;
 import com.kdd.global.response.PageResponse;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -30,6 +32,13 @@ public class DocumentService {
 
     private static final int CHUNK_SIZE = 550;
     private static final int CHUNK_OVERLAP = 100;
+    private static final int POPULAR_DAYS = 7;
+    private static final int POPULAR_LIMIT = 10;
+
+    private static final Map<String, Sort> SORT_MAP = Map.of(
+            "latest", Sort.by("createdAt", "id").descending(),
+            "popular", Sort.by(Sort.Order.desc("viewCount"), Sort.Order.desc("createdAt"), Sort.Order.desc("id"))
+    );
 
     @Transactional
     public DocumentDetailResponse upload(MultipartFile file, DocumentUploadRequest request) {
@@ -122,6 +131,69 @@ public class DocumentService {
                         PageRequest.of(page, pageSize, Sort.by("updatedAt", "id").descending())),
                 DocumentByCategoryResponse::from
         );
+    }
+
+    @Transactional
+    public DocumentDetailPublicResponse getDocumentDetail(Long documentId) {
+        Document document = findDocumentOrThrow(documentId);
+        document.incrementViewCount();
+        return DocumentDetailPublicResponse.from(document);
+    }
+
+    public PageResponse<DocumentSearchResponse> searchDocuments(Long categoryId, String keyword,
+                                                                String sort, int page, int pageSize) {
+        validatePageParams(page, pageSize);
+        Sort sortOrder = parseSort(sort);
+
+        List<Long> categoryIds = null;
+        if (categoryId != null) {
+            categoryRepository.findById(categoryId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
+            List<DocumentCategory> all = categoryRepository.findAllOrdered();
+            categoryIds = new ArrayList<>();
+            collectCategoryIds(categoryId, all, categoryIds);
+        }
+
+        String normalizedKeyword = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
+        String escapedKeyword = normalizedKeyword == null ? null : escapeLike(normalizedKeyword);
+
+        return PageResponse.from(
+                documentRepository.searchActive(categoryIds, escapedKeyword,
+                        PageRequest.of(page, pageSize, sortOrder)),
+                DocumentSearchResponse::from
+        );
+    }
+
+    public List<PopularDocumentResponse> getPopularDocuments() {
+        LocalDateTime since = LocalDateTime.now().minusDays(POPULAR_DAYS);
+        return documentRepository.findPopularSince(since, PageRequest.of(0, POPULAR_LIMIT)).stream()
+                .map(PopularDocumentResponse::from)
+                .toList();
+    }
+
+    private void collectCategoryIds(Long parentId, List<DocumentCategory> all, List<Long> result) {
+        result.add(parentId);
+        all.stream()
+                .filter(c -> c.getParent() != null && c.getParent().getId().equals(parentId))
+                .forEach(child -> collectCategoryIds(child.getId(), all, result));
+    }
+
+    private Sort parseSort(String sort) {
+        if (sort == null || sort.isBlank()) {
+            return SORT_MAP.get("latest");
+        }
+        Sort result = SORT_MAP.get(sort.toLowerCase());
+        if (result == null) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        return result;
+    }
+
+    private String escapeLike(String keyword) {
+        return keyword
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 
     public PageResponse<DocumentListResponse> getDocuments(int page, int size) {
