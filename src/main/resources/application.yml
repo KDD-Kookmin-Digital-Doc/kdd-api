@@ -24,3 +24,5 @@ app:
   auth:
     allowed-domain: ${ALLOWED_DOMAIN:kookmin.ac.kr}
     admin-emails: ${DOC_ADMIN_EMAILS:}
+  ai:
+    server-url: ${AI_SERVER_URL}

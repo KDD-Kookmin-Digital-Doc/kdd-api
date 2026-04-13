@@ -9,15 +9,16 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum StaffDepartment {
 
-    STUDENT_SUPPORT("student_support"),
-    ACADEMIC_AFFAIRS("academic_affairs"),
-    ADMISSIONS("admissions"),
-    INDUSTRY_COOPERATION("industry_cooperation"),
-    INTERNATIONAL_OFFICE("international_office"),
-    GENERAL_AFFAIRS("general_affairs"),
-    OTHER("other");
+    STUDENT_SUPPORT("student_support", "학생지원팀"),
+    ACADEMIC_AFFAIRS("academic_affairs", "학사팀"),
+    ADMISSIONS("admissions", "입학팀"),
+    INDUSTRY_COOPERATION("industry_cooperation", "산학협력팀"),
+    INTERNATIONAL_OFFICE("international_office", "국제교류팀"),
+    GENERAL_AFFAIRS("general_affairs", "총무팀"),
+    OTHER("other", "기타");
 
     private final String value;
+    private final String displayName;
 
     public static StaffDepartment from(String value) {
         for (StaffDepartment dept : values()) {
