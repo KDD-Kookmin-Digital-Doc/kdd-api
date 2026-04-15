@@ -15,6 +15,7 @@ public class UserContextBuilder {
     private final StaffProfileRepository staffProfileRepository;
 
     public String buildContext(User user) {
+        // 컨텍스트 생성 실패가 메시지 전송 전체 실패로 전이되지 않도록, 필드 누락 시 NPE 대신 이름 폴백
         if (user.getUserType() == UserType.STUDENT) {
             return studentProfileRepository.findById(user.getId())
                     .filter(p -> p.getDepartment() != null

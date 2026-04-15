@@ -30,6 +30,7 @@ public class ChatMessagePersister {
 
     @Transactional
     public Long saveUserMessage(Long sessionId, String content) {
+        // 세션 존재는 상위 레이어에서 이미 검증했으므로 FK 주입 용도로만 프록시 참조 (불필요한 SELECT 회피)
         ChatSession session = chatSessionRepository.getReferenceById(sessionId);
         ChatMessage message = chatMessageRepository.save(ChatMessage.builder()
                 .session(session)
@@ -57,6 +58,8 @@ public class ChatMessagePersister {
                             src.docId(), src.chunkId());
                     continue;
                 }
+                // Chunk만 조회한 뒤 chunk.getDocument()로 Document를 얻으면 쿼리 수가 절반이 되고
+                // AI가 보낸 docId-chunkId 조합이 실제 소속 관계와 일치하는지까지 함께 검증할 수 있음
                 DocumentChunk chunk = documentChunkRepository.findById(src.chunkId()).orElse(null);
                 if (chunk == null) {
                     log.warn("Source chunk not found in DB: docId={}, chunkId={}", src.docId(), src.chunkId());

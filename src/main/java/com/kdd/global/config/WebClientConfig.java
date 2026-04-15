@@ -13,6 +13,7 @@ public class WebClientConfig {
 
     @Bean
     public WebClient aiServerWebClient(@Value("${app.ai.server-url}") String baseUrl) {
+        // 스트리밍 응답 지속 시간은 SseEmitter 타임아웃이 담당하므로 여기선 연결 수립 시점만 제한
         HttpClient httpClient = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10_000);
 
