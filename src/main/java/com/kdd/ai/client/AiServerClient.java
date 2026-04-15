@@ -39,6 +39,8 @@ public class AiServerClient {
             }
             log.info("[AI] embed result: status={}, embedded={}", response.status(), response.embeddedChunkCount());
             return response;
+        } catch (AiServerException e) {
+            throw e;
         } catch (RestClientResponseException e) {
             log.error("[AI] embed HTTP error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
             throw new AiServerException("AI embed HTTP error: " + e.getStatusCode(), e);
@@ -69,6 +71,8 @@ public class AiServerClient {
             log.info("[AI] delete result: status={}, deleted_chunks={}",
                     response.status(), response.deletedChunkCount());
             return response;
+        } catch (AiServerException e) {
+            throw e;
         } catch (RestClientResponseException e) {
             log.error("[AI] delete HTTP error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
             throw new AiServerException("AI delete HTTP error: " + e.getStatusCode(), e);
