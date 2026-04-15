@@ -21,7 +21,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
@@ -54,7 +53,6 @@ public class ChatMessageService {
                 content,
                 String.valueOf(sessionId),
                 context.userContext(),
-                context.isFirstMessage(),
                 context.history()
         );
 
@@ -63,8 +61,7 @@ public class ChatMessageService {
         return emitter;
     }
 
-    @Transactional(readOnly = true)
-    protected ContextData prepareContext(Long sessionId, Long userId) {
+    private ContextData prepareContext(Long sessionId, Long userId) {
         ChatSession session = chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
         if (!session.getUser().getId().equals(userId)) {
@@ -80,9 +77,8 @@ public class ChatMessageService {
                 .sorted(Comparator.comparing(ChatMessage::getCreatedAt))
                 .map(m -> new AiChatRequest.HistoryEntry(m.getRole().getValue(), m.getContent()))
                 .toList();
-        boolean isFirstMessage = chatMessageRepository.countBySessionId(sessionId) == 0;
 
-        return new ContextData(userContext, history, isFirstMessage);
+        return new ContextData(userContext, history);
     }
 
     private void streamFromAiServer(SseEmitter emitter, Long sessionId, AiChatRequest request) {
@@ -244,8 +240,7 @@ public class ChatMessageService {
 
     private record ContextData(
             String userContext,
-            List<AiChatRequest.HistoryEntry> history,
-            boolean isFirstMessage
+            List<AiChatRequest.HistoryEntry> history
     ) {
     }
 }

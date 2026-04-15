@@ -8,16 +8,13 @@ import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 
-import java.time.Duration;
-
 @Configuration
 public class WebClientConfig {
 
     @Bean
     public WebClient aiServerWebClient(@Value("${app.ai.server-url}") String baseUrl) {
         HttpClient httpClient = HttpClient.create()
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10_000)
-                .responseTimeout(Duration.ofSeconds(60));
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10_000);
 
         return WebClient.builder()
                 .baseUrl(baseUrl)
