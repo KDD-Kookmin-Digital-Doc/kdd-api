@@ -17,6 +17,9 @@ public class UserContextBuilder {
     public String buildContext(User user) {
         if (user.getUserType() == UserType.STUDENT) {
             return studentProfileRepository.findById(user.getId())
+                    .filter(p -> p.getDepartment() != null
+                            && p.getGrade() != null
+                            && p.getAcademicStatus() != null)
                     .map(p -> "%s %d학년 %s".formatted(
                             p.getDepartment().getDisplayName(),
                             p.getGrade(),
@@ -25,6 +28,7 @@ public class UserContextBuilder {
         }
 
         return staffProfileRepository.findById(user.getId())
+                .filter(p -> p.getDepartment() != null)
                 .map(p -> "%s 직원".formatted(p.getDepartment().getDisplayName()))
                 .orElseGet(user::getName);
     }
