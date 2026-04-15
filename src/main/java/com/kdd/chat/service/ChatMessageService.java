@@ -78,10 +78,12 @@ public class ChatMessageService {
         String userContext = userContextBuilder.buildContext(user);
 
         // DB에서는 최신 10개를 뽑기 위해 DESC로 조회하지만, AI는 대화 순서대로 ASC를 기대하므로 메모리에서 재정렬
+        // createdAt이 동일할 때 stable sort가 조회 순서(id DESC)를 유지하면 같은 시각 메시지가 역순이 되므로 id를 tie-breaker로 추가
         List<AiChatRequest.HistoryEntry> history = chatMessageRepository
                 .findTop10BySessionIdOrderByCreatedAtDescIdDesc(sessionId)
                 .stream()
-                .sorted(Comparator.comparing(ChatMessage::getCreatedAt))
+                .sorted(Comparator.comparing(ChatMessage::getCreatedAt)
+                        .thenComparing(ChatMessage::getId))
                 .map(m -> new AiChatRequest.HistoryEntry(m.getRole().getValue(), m.getContent()))
                 .toList();
 
@@ -95,6 +97,8 @@ public class ChatMessageService {
         // 클라가 끊겨도 AI 스트림 구독은 유지해 답변을 끝까지 받아 DB에 저장한다.
         // 이 플래그는 "emitter로 더 보내도 되는지"만 판단하며, 누적과 최종 영속화에는 영향이 없다.
         AtomicBoolean clientConnected = new AtomicBoolean(true);
+        // AI가 명세대로 done/error 중 하나로 종료했는지 추적 — 둘 다 없이 스트림이 닫히면 비정상 종료로 처리해야 한다
+        AtomicBoolean terminalReceived = new AtomicBoolean(false);
 
         Disposable disposable = aiServerWebClient.post()
                 .uri("/api/chat")
@@ -108,9 +112,10 @@ public class ChatMessageService {
                 .publishOn(Schedulers.boundedElastic())
                 .subscribe(
                         node -> handleEvent(emitter, node, sessionId,
-                                contentAccumulator, confidenceRef, capturedSources, clientConnected),
-                        error -> handleStreamError(emitter, error, clientConnected),
-                        () -> log.debug("AI server stream closed for session {}", sessionId)
+                                contentAccumulator, confidenceRef, capturedSources,
+                                clientConnected, terminalReceived),
+                        error -> handleStreamError(emitter, error, clientConnected, terminalReceived),
+                        () -> handleStreamComplete(emitter, sessionId, clientConnected, terminalReceived)
                 );
 
         // dispose()를 호출하지 않음: 클라 연결이 끊겨도 AI 스트림은 done/error까지 지속되어야 하기 때문
@@ -129,21 +134,30 @@ public class ChatMessageService {
                              StringBuilder contentAccumulator,
                              AtomicReference<ConfidenceLevel> confidenceRef,
                              List<AiSourceRaw> capturedSources,
-                             AtomicBoolean clientConnected) {
+                             AtomicBoolean clientConnected,
+                             AtomicBoolean terminalReceived) {
         try {
             String type = node.path("type").asText();
             switch (type) {
                 case "meta" -> handleMeta(emitter, node, confidenceRef, capturedSources, clientConnected);
                 case "fallback" -> handleFallback(emitter, node, contentAccumulator, clientConnected);
                 case "text" -> handleText(emitter, node, contentAccumulator, clientConnected);
-                case "done" -> handleDone(emitter, sessionId, contentAccumulator, confidenceRef, capturedSources, clientConnected);
-                case "error" -> handleAiError(emitter, node, clientConnected);
+                case "done" -> {
+                    terminalReceived.set(true);
+                    handleDone(emitter, sessionId, contentAccumulator, confidenceRef, capturedSources, clientConnected);
+                }
+                case "error" -> {
+                    terminalReceived.set(true);
+                    handleAiError(emitter, node, clientConnected);
+                }
                 default -> log.warn("Unknown SSE event type: {}", type);
             }
         } catch (Exception e) {
             log.error("Failed to process SSE event for session {}", sessionId, e);
+            // handleStreamError와 동일한 패턴으로 ErrorEvent 먼저 내려주고 정상 종료해 마지막 이벤트 플러시를 보장한다
+            trySend(emitter, ErrorEvent.of("답변 처리 중 오류가 발생했습니다."), clientConnected);
             if (clientConnected.get()) {
-                safeCompleteWithError(emitter, e);
+                safeComplete(emitter);
             }
         }
     }
@@ -254,11 +268,28 @@ public class ChatMessageService {
     }
 
     private void handleStreamError(SseEmitter emitter, Throwable error,
-                                   AtomicBoolean clientConnected) {
+                                   AtomicBoolean clientConnected,
+                                   AtomicBoolean terminalReceived) {
+        terminalReceived.set(true);
         log.error("AI server streaming error", error);
         trySend(emitter, ErrorEvent.of("AI 서버와의 통신에 실패했습니다."), clientConnected);
         if (clientConnected.get()) {
             // ErrorEvent를 이미 클라이언트에 내려줬으므로 completeWithError 대신 정상 종료로 마지막 이벤트 플러시 보장
+            safeComplete(emitter);
+        }
+    }
+
+    private void handleStreamComplete(SseEmitter emitter, Long sessionId,
+                                      AtomicBoolean clientConnected,
+                                      AtomicBoolean terminalReceived) {
+        if (terminalReceived.get()) {
+            log.debug("AI server stream closed for session {}", sessionId);
+            return;
+        }
+        // done/error 없이 스트림이 닫히면 FE는 타임아웃까지 매달려 있고 누적본도 유실된다 — 에러로 정리
+        log.warn("AI server stream closed without terminal event for session {}", sessionId);
+        trySend(emitter, ErrorEvent.of("AI 서버와의 통신이 비정상 종료됐습니다."), clientConnected);
+        if (clientConnected.get()) {
             safeComplete(emitter);
         }
     }
@@ -271,13 +302,6 @@ public class ChatMessageService {
             // 전송 도중 클라가 끊겼을 가능성이 큼 — 플래그를 내려 이후 이벤트는 DB 누적에만 쓰이게 한다
             clientConnected.set(false);
             log.debug("Client disconnected during SSE send: {}", e.getMessage());
-        }
-    }
-
-    private void safeCompleteWithError(SseEmitter emitter, Throwable error) {
-        try {
-            emitter.completeWithError(error);
-        } catch (Exception ignored) {
         }
     }
 
