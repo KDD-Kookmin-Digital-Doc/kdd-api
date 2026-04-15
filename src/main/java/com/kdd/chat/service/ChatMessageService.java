@@ -41,10 +41,12 @@ public class ChatMessageService {
     private final ChatMessagePersister persister;
     private final WebClient aiServerWebClient;
 
+    // AI 답변 생성에 수십 초가 걸릴 수 있어 일반 HTTP 타임아웃보다 길게 설정
     private static final long SSE_TIMEOUT_MS = 300_000L;
 
     public SseEmitter sendMessage(Long sessionId, Long userId, String content) {
         ContextData context = prepareContext(sessionId, userId);
+        // AI 호출 실패·스트리밍 중단과 무관하게 사용자 입력은 히스토리로 남겨야 하므로 먼저 영속화
         persister.saveUserMessage(sessionId, content);
 
         AiChatRequest request = new AiChatRequest(
@@ -68,6 +70,7 @@ public class ChatMessageService {
         }
         String userContext = userContextBuilder.buildContext(user);
 
+        // DB에서는 최신 10개를 뽑기 위해 DESC로 조회하지만, AI는 대화 순서대로 ASC를 기대하므로 메모리에서 재정렬
         List<AiChatRequest.HistoryEntry> history = chatMessageRepository
                 .findTop10BySessionIdOrderByCreatedAtDescIdDesc(sessionId)
                 .stream()
@@ -89,6 +92,7 @@ public class ChatMessageService {
                 .bodyValue(request)
                 .retrieve()
                 .bodyToFlux(JsonNode.class)
+                // SseEmitter.send()는 블로킹 I/O라 Netty 이벤트 루프를 점유하면 안 됨 → 별도 스케줄러로 이관
                 .publishOn(Schedulers.boundedElastic())
                 .subscribe(
                         node -> handleEvent(emitter, node, sessionId,
@@ -135,10 +139,12 @@ public class ChatMessageService {
         MetaEvent event = switch (subtype) {
             case "document" -> {
                 String confidence = node.path("confidence").asText(null);
+                // NullNode.asInt()는 0을 반환해 실제 null과 구분이 사라지므로 hasNonNull로 선제 체크
                 Integer similarityScore = node.hasNonNull("similarity_score")
                         ? node.get("similarity_score").asInt() : null;
                 List<SseSourceDto> sseSources = extractSources(node, capturedSources);
                 if (confidence != null) {
+                    // AI가 스펙 외 문자열을 보내도 전체 스트림이 끊어지지 않도록 파싱 실패는 무시하고 null 유지
                     try {
                         confidenceRef.set(ConfidenceLevel.from(confidence));
                     } catch (IllegalArgumentException e) {
@@ -230,6 +236,7 @@ public class ChatMessageService {
             emitter.send(SseEmitter.event().data(ErrorEvent.of("AI 서버와의 통신에 실패했습니다.")));
         } catch (Exception ignored) {
         }
+        // ErrorEvent를 이미 클라이언트에 내려줬으므로 completeWithError 대신 정상 종료로 마지막 이벤트 플러시 보장
         safeComplete(emitter);
     }
 
