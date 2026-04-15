@@ -156,9 +156,6 @@ public class ChatMessageService {
         MetaEvent event = switch (subtype) {
             case "document" -> {
                 String confidence = node.path("confidence").asText(null);
-                // NullNode.asInt()는 0을 반환해 실제 null과 구분이 사라지므로 hasNonNull로 선제 체크
-                Integer similarityScore = node.hasNonNull("similarity_score")
-                        ? node.get("similarity_score").asInt() : null;
                 List<SseSourceDto> sseSources = extractSources(node, capturedSources);
                 if (confidence != null) {
                     // AI가 스펙 외 문자열을 보내도 전체 스트림이 끊어지지 않도록 파싱 실패는 무시하고 null 유지
@@ -168,7 +165,7 @@ public class ChatMessageService {
                         log.warn("Unknown confidence level from AI server: {}", confidence);
                     }
                 }
-                yield MetaEvent.document(confidence, similarityScore, sseSources);
+                yield MetaEvent.document(confidence, sseSources);
             }
             case "cache" -> MetaEvent.cache(extractSources(node, capturedSources));
             case "chitchat" -> MetaEvent.chitchat();
