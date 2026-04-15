@@ -10,7 +10,7 @@ import lombok.RequiredArgsConstructor;
 public enum StudentDepartment {
 
     SOFTWARE("software", "소프트웨어학부"),
-    AI("ai", "AI학부");
+    AI("ai", "인공지능학부");
 
     private final String value;
     private final String displayName;

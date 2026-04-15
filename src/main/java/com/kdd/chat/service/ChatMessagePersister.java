@@ -11,7 +11,6 @@ import com.kdd.chat.repository.ChatSessionRepository;
 import com.kdd.document.entity.Document;
 import com.kdd.document.entity.DocumentChunk;
 import com.kdd.document.repository.DocumentChunkRepository;
-import com.kdd.document.repository.DocumentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,7 +26,6 @@ public class ChatMessagePersister {
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final ChatMessageSourceRepository chatMessageSourceRepository;
-    private final DocumentRepository documentRepository;
     private final DocumentChunkRepository documentChunkRepository;
 
     @Transactional
@@ -59,10 +57,15 @@ public class ChatMessagePersister {
                             src.docId(), src.chunkId());
                     continue;
                 }
-                Document doc = documentRepository.findById(src.docId()).orElse(null);
                 DocumentChunk chunk = documentChunkRepository.findById(src.chunkId()).orElse(null);
-                if (doc == null || chunk == null) {
-                    log.warn("Source not found in DB: docId={}, chunkId={}", src.docId(), src.chunkId());
+                if (chunk == null) {
+                    log.warn("Source chunk not found in DB: docId={}, chunkId={}", src.docId(), src.chunkId());
+                    continue;
+                }
+                Document doc = chunk.getDocument();
+                if (doc == null || !doc.getId().equals(src.docId())) {
+                    log.warn("Source doc/chunk mismatch: docId={}, chunkId={}, chunk.docId={}",
+                            src.docId(), src.chunkId(), doc != null ? doc.getId() : null);
                     continue;
                 }
                 chatMessageSourceRepository.save(ChatMessageSource.builder()

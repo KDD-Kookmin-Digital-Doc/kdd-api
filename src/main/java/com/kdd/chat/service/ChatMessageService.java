@@ -16,7 +16,6 @@ import com.kdd.chat.repository.ChatSessionRepository;
 import com.kdd.global.error.BusinessException;
 import com.kdd.global.error.ErrorCode;
 import com.kdd.user.entity.User;
-import com.kdd.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -38,7 +37,6 @@ public class ChatMessageService {
 
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
-    private final UserRepository userRepository;
     private final UserContextBuilder userContextBuilder;
     private final ChatMessagePersister persister;
     private final WebClient aiServerWebClient;
@@ -64,15 +62,14 @@ public class ChatMessageService {
     private ContextData prepareContext(Long sessionId, Long userId) {
         ChatSession session = chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
-        if (!session.getUser().getId().equals(userId)) {
+        User user = session.getUser();
+        if (!user.getId().equals(userId)) {
             throw new BusinessException(ErrorCode.SESSION_FORBIDDEN);
         }
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         String userContext = userContextBuilder.buildContext(user);
 
         List<AiChatRequest.HistoryEntry> history = chatMessageRepository
-                .findTop10BySessionIdOrderByCreatedAtDesc(sessionId)
+                .findTop10BySessionIdOrderByCreatedAtDescIdDesc(sessionId)
                 .stream()
                 .sorted(Comparator.comparing(ChatMessage::getCreatedAt))
                 .map(m -> new AiChatRequest.HistoryEntry(m.getRole().getValue(), m.getContent()))
@@ -138,10 +135,15 @@ public class ChatMessageService {
         MetaEvent event = switch (subtype) {
             case "document" -> {
                 String confidence = node.path("confidence").asText(null);
-                Integer similarityScore = node.has("similarity_score") ? node.get("similarity_score").asInt() : null;
+                Integer similarityScore = node.hasNonNull("similarity_score")
+                        ? node.get("similarity_score").asInt() : null;
                 List<SseSourceDto> sseSources = extractSources(node, capturedSources);
                 if (confidence != null) {
-                    confidenceRef.set(ConfidenceLevel.from(confidence));
+                    try {
+                        confidenceRef.set(ConfidenceLevel.from(confidence));
+                    } catch (IllegalArgumentException e) {
+                        log.warn("Unknown confidence level from AI server: {}", confidence);
+                    }
                 }
                 yield MetaEvent.document(confidence, similarityScore, sseSources);
             }
@@ -228,12 +230,19 @@ public class ChatMessageService {
             emitter.send(SseEmitter.event().data(ErrorEvent.of("AI 서버와의 통신에 실패했습니다.")));
         } catch (Exception ignored) {
         }
-        safeCompleteWithError(emitter, error);
+        safeComplete(emitter);
     }
 
     private void safeCompleteWithError(SseEmitter emitter, Throwable error) {
         try {
             emitter.completeWithError(error);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeComplete(SseEmitter emitter) {
+        try {
+            emitter.complete();
         } catch (Exception ignored) {
         }
     }
