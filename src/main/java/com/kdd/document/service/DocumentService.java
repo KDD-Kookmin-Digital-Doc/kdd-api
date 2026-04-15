@@ -1,9 +1,12 @@
 package com.kdd.document.service;
 
+import com.kdd.ai.client.AiServerClient;
+import com.kdd.ai.dto.AiEmbedRequest;
+import com.kdd.ai.dto.AiEmbedResponse;
+import com.kdd.ai.exception.AiServerException;
 import com.kdd.document.dto.*;
 import com.kdd.document.entity.*;
 import com.kdd.document.repository.DocumentCategoryRepository;
-import com.kdd.document.repository.DocumentChunkRepository;
 import com.kdd.document.repository.DocumentRepository;
 import com.kdd.global.error.BusinessException;
 import com.kdd.global.error.ErrorCode;
@@ -23,21 +26,28 @@ import org.springframework.web.multipart.MultipartFile;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class DocumentService {
 
     private final DocumentRepository documentRepository;
-    private final DocumentChunkRepository chunkRepository;
     private final DocumentCategoryRepository categoryRepository;
+    private final DocumentPersistenceService persistenceService;
+    private final AiServerClient aiServerClient;
 
-    private static final int CHUNK_SIZE = 550;
-    private static final int CHUNK_OVERLAP = 100;
     private static final int POPULAR_DAYS = 7;
     private static final int POPULAR_LIMIT = 10;
 
     private static final Sort SORT_LATEST = Sort.by("updatedAt", "id").descending();
 
-    @Transactional
+    /**
+     * 문서 업로드 플로우.
+     * <ol>
+     *     <li>트랜잭션 없이 파일 검증·PDF 텍스트 추출</li>
+     *     <li>독립 트랜잭션으로 Document/Chunk 저장 (status=PROCESSING)</li>
+     *     <li>트랜잭션 밖에서 AI embed 호출 (최대 120초)</li>
+     *     <li>독립 트랜잭션으로 최종 상태(COMPLETED/FAILED) 업데이트</li>
+     * </ol>
+     * AI 호출이 트랜잭션 경계 밖에서 일어나므로 DB 락을 길게 잡지 않는다.
+     */
     public DocumentDetailResponse upload(MultipartFile file, DocumentUploadRequest request) {
         if (file.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
@@ -45,53 +55,77 @@ public class DocumentService {
 
         validatePdf(file);
 
-        DocumentCategory category = categoryRepository.findById(request.getCategoryId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
-
-        String title = request.getTitle();
         String originalFilename = file.getOriginalFilename();
-        if (title == null || title.isBlank()) {
-            title = originalFilename != null
-                    ? originalFilename.replaceFirst("[.][^.]+$", "")
-                    : "제목 없음";
-        }
+        String title = resolveTitle(request.getTitle(), originalFilename);
 
+        // PDF 텍스트 추출 (트랜잭션 없음)
         String content = "";
-        DocumentStatus status = DocumentStatus.COMPLETED;
+        DocumentStatus initialStatus = DocumentStatus.PROCESSING;
         try (var pdfDoc = org.apache.pdfbox.Loader.loadPDF(file.getBytes())) {
             content = new org.apache.pdfbox.text.PDFTextStripper().getText(pdfDoc);
         } catch (Exception e) {
             log.warn("PDF 텍스트 추출 실패: {}", e.getMessage());
-            status = DocumentStatus.FAILED;
+            initialStatus = DocumentStatus.FAILED;
         }
 
         if (!content.isBlank()) {
             content = content.replace("\u0000", "");
         }
-
-        if (status == DocumentStatus.COMPLETED && content.isBlank()) {
-            status = DocumentStatus.FAILED;
+        if (initialStatus == DocumentStatus.PROCESSING && content.isBlank()) {
+            initialStatus = DocumentStatus.FAILED;
         }
 
-        Document document = Document.builder()
-                .title(title)
-                .content(content)
-                .category(category)
-                .source(parseSource(request.getSource()))
-                .originalFilename(originalFilename)
-                .mimeType("application/pdf")
-                .fileSize(file.getSize())
-                .status(status)
-                .build();
-        documentRepository.save(document);
+        DocumentSource source = parseSource(request.getSource());
 
-        if (status == DocumentStatus.COMPLETED && !content.isBlank()) {
-            createChunks(document, content);
+        // 1차 트랜잭션: 저장 + embed 요청 body 준비
+        DocumentPersistenceService.SavePayload payload = persistenceService.saveDocumentAndBuildEmbedRequest(
+                title, content, request.getCategoryId(), source, originalFilename, file.getSize(), initialStatus
+        );
+
+        // PDF 파싱 실패 또는 빈 컨텐츠는 AI 호출 없이 종료
+        if (initialStatus == DocumentStatus.FAILED || payload.embedRequest() == null) {
+            return DocumentDetailResponse.from(persistenceService.findActiveForResponse(payload.documentId()));
         }
 
-        return DocumentDetailResponse.from(document);
+        // 트랜잭션 밖에서 AI embed 호출
+        boolean aiSuccess = invokeAiEmbed(payload.embedRequest());
+
+        // 2차 트랜잭션: 최종 상태 업데이트
+        DocumentStatus finalStatus = aiSuccess ? DocumentStatus.COMPLETED : DocumentStatus.FAILED;
+        persistenceService.updateStatus(payload.documentId(), finalStatus);
+
+        return DocumentDetailResponse.from(persistenceService.findActiveForResponse(payload.documentId()));
     }
 
+    private String resolveTitle(String requested, String originalFilename) {
+        if (requested != null && !requested.isBlank()) {
+            return requested;
+        }
+        return originalFilename != null
+                ? originalFilename.replaceFirst("[.][^.]+$", "")
+                : "제목 없음";
+    }
+
+    /**
+     * AI 서버 embed 호출. 성공(success) → true, partial_failure/예외 → false.
+     * 반환값만 전달하고 상태 업데이트는 호출자가 별도 트랜잭션에서 수행한다.
+     */
+    private boolean invokeAiEmbed(AiEmbedRequest request) {
+        try {
+            AiEmbedResponse response = aiServerClient.embed(request);
+            if (!response.isSuccess()) {
+                log.warn("[AI] embed partial_failure for doc_id={}, embedded={}",
+                        request.docId(), response.embeddedChunkCount());
+                return false;
+            }
+            return true;
+        } catch (AiServerException e) {
+            log.error("[AI] embed failed for doc_id={}", request.docId(), e);
+            return false;
+        }
+    }
+
+    @Transactional(readOnly = true)
     public List<CategoryTreeResponse> getCategoryTree() {
         List<DocumentCategory> all = categoryRepository.findAllOrdered();
 
@@ -110,6 +144,7 @@ public class DocumentService {
         return CategoryTreeResponse.from(parent, children);
     }
 
+    @Transactional(readOnly = true)
     public PageResponse<DocumentByCategoryResponse> getDocumentsByCategory(Long categoryId, int page, int pageSize) {
         validatePageParams(page, pageSize);
         categoryRepository.findById(categoryId)
@@ -137,6 +172,7 @@ public class DocumentService {
         return DocumentDetailPublicResponse.from(document);
     }
 
+    @Transactional(readOnly = true)
     public PageResponse<DocumentSearchResponse> searchDocuments(Long categoryId, String keyword,
                                                                 String sort, int page, int pageSize) {
         validatePageParams(page, pageSize);
@@ -171,6 +207,7 @@ public class DocumentService {
         );
     }
 
+    @Transactional(readOnly = true)
     public List<PopularDocumentResponse> getPopularDocuments() {
         LocalDateTime since = LocalDateTime.now().minusDays(POPULAR_DAYS);
         return documentRepository.findPopularDocuments(since, PageRequest.of(0, POPULAR_LIMIT)).stream()
@@ -199,6 +236,7 @@ public class DocumentService {
                 .replace("_", "\\_");
     }
 
+    @Transactional(readOnly = true)
     public PageResponse<DocumentListResponse> getDocuments(int page, int size) {
         validatePageParams(page, size);
         return PageResponse.from(
@@ -216,26 +254,62 @@ public class DocumentService {
         return DocumentDetailResponse.from(document);
     }
 
+    @Transactional(readOnly = true)
     public DocumentStatusResponse getDocumentStatus(Long documentId) {
         Document document = findDocumentOrThrow(documentId);
         return DocumentStatusResponse.from(document);
     }
 
-    @Transactional
+    /**
+     * 재처리 플로우.
+     * <ol>
+     *     <li>독립 트랜잭션으로 상태 검증 + REPROCESSING 전이 + 기존 청크로 embed 요청 body 생성</li>
+     *     <li>트랜잭션 밖에서 AI delete (기존 벡터/캐시 제거)</li>
+     *     <li>트랜잭션 밖에서 AI embed</li>
+     *     <li>독립 트랜잭션으로 최종 상태(COMPLETED/FAILED) 전이</li>
+     * </ol>
+     */
     public DocumentReprocessResponse reprocess(Long documentId) {
-        Document document = findDocumentOrThrow(documentId);
-        if (document.getStatus() == DocumentStatus.PROCESSING || document.getStatus() == DocumentStatus.REPROCESSING) {
-            throw new BusinessException(ErrorCode.DOCUMENT_ALREADY_PROCESSING);
+        DocumentPersistenceService.SavePayload payload =
+                persistenceService.startReprocessingAndBuildRequest(documentId);
+
+        if (payload.embedRequest() == null) {
+            persistenceService.updateStatus(documentId, DocumentStatus.FAILED);
+            return DocumentReprocessResponse.from(persistenceService.findActiveForResponse(documentId));
         }
-        document.updateStatus(DocumentStatus.REPROCESSING);
-        return DocumentReprocessResponse.from(document);
+
+        // 트랜잭션 밖에서 AI 기존 벡터 삭제 (실패해도 진행, 멱등성 보장)
+        try {
+            aiServerClient.deleteDocument(String.valueOf(documentId));
+        } catch (AiServerException e) {
+            log.error("[AI] reprocess delete step failed for doc_id={}, continuing", documentId, e);
+        }
+
+        boolean success = invokeAiEmbed(payload.embedRequest());
+        DocumentStatus finalStatus = success ? DocumentStatus.COMPLETED : DocumentStatus.FAILED;
+        persistenceService.updateStatus(documentId, finalStatus);
+
+        return DocumentReprocessResponse.from(persistenceService.findActiveForResponse(documentId));
     }
 
-    @Transactional
+    /**
+     * 문서 삭제 플로우.
+     * <ol>
+     *     <li>독립 트랜잭션으로 활성 문서 존재 여부만 검증</li>
+     *     <li>트랜잭션 밖에서 AI 삭제 호출 (실패 시 로그만 남기고 진행)</li>
+     *     <li>독립 트랜잭션으로 청크 hard delete + Document soft delete</li>
+     * </ol>
+     */
     public void delete(Long documentId) {
-        Document document = findDocumentOrThrow(documentId);
-        chunkRepository.deleteByDocumentId(documentId);
-        document.softDelete();
+        persistenceService.assertActiveExists(documentId);
+
+        try {
+            aiServerClient.deleteDocument(String.valueOf(documentId));
+        } catch (AiServerException e) {
+            log.error("[AI] delete call failed for doc_id={}, continuing with BE deletion", documentId, e);
+        }
+
+        persistenceService.hardDeleteChunksAndSoftDeleteDocument(documentId);
     }
 
     private Document findDocumentOrThrow(Long documentId) {
@@ -271,23 +345,4 @@ public class DocumentService {
         }
     }
 
-    private void createChunks(Document document, String content) {
-        List<DocumentChunk> chunks = new ArrayList<>();
-        int idx = 0;
-        int start = 0;
-        while (start < content.length()) {
-            int end = Math.min(start + CHUNK_SIZE, content.length());
-            String chunk = content.substring(start, end).strip();
-            if (!chunk.isEmpty()) {
-                chunks.add(DocumentChunk.builder()
-                        .document(document)
-                        .content(chunk)
-                        .chunkIndex(idx++)
-                        .hasTable(false)
-                        .build());
-            }
-            start += CHUNK_SIZE - CHUNK_OVERLAP;
-        }
-        chunkRepository.saveAll(chunks);
-    }
 }
