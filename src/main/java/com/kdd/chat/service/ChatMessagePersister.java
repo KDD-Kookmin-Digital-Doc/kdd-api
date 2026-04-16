@@ -1,5 +1,6 @@
 package com.kdd.chat.service;
 
+import com.kdd.chat.dto.ai.AiChatRequest;
 import com.kdd.chat.entity.ChatMessage;
 import com.kdd.chat.entity.ChatMessageSource;
 import com.kdd.chat.entity.ChatSession;
@@ -11,11 +12,15 @@ import com.kdd.chat.repository.ChatSessionRepository;
 import com.kdd.document.entity.Document;
 import com.kdd.document.entity.DocumentChunk;
 import com.kdd.document.repository.DocumentChunkRepository;
+import com.kdd.global.error.BusinessException;
+import com.kdd.global.error.ErrorCode;
+import com.kdd.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -29,17 +34,51 @@ public class ChatMessagePersister {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatMessageSourceRepository chatMessageSourceRepository;
     private final DocumentChunkRepository documentChunkRepository;
+    private final UserContextBuilder userContextBuilder;
 
+    // SSE 스트리밍 시작 전에 필요한 모든 DB 작업(세션·유저 검증, 컨텍스트/히스토리 조회, 사용자 메시지 저장)을
+    // 한 트랜잭션에 묶어 짧게 끝낸다. open-in-view=false 환경에서 ChatSession.user / 프로필 조회 등의 lazy
+    // 로딩이 안전하게 일어나도록 하면서, 트랜잭션 종료와 동시에 커넥션을 풀로 반환해 SSE 수십 초 동안
+    // 커넥션 점유가 발생하지 않게 한다.
     @Transactional
-    public Long saveUserMessage(Long sessionId, String content) {
-        // 세션 존재는 상위 레이어에서 이미 검증했으므로 FK 주입 용도로만 프록시 참조 (불필요한 SELECT 회피)
-        ChatSession session = chatSessionRepository.getReferenceById(sessionId);
-        ChatMessage message = chatMessageRepository.save(ChatMessage.builder()
+    public PreparedChat prepareAndSaveUserMessage(Long sessionId, Long userId, String content) {
+        ChatSession session = chatSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
+        User user = session.getUser();
+        if (!user.getId().equals(userId)) {
+            throw new BusinessException(ErrorCode.SESSION_FORBIDDEN);
+        }
+        String userContext = userContextBuilder.buildContext(user);
+
+        // 사용자 메시지 저장 전에 isFirstMessage 판정과 히스토리 조회를 끝내야 한다.
+        // Hibernate auto-flush로 save 이후 쿼리는 방금 저장한 메시지를 포함하게 되므로 순서가 중요.
+        boolean isFirstMessage = !chatMessageRepository.existsBySessionId(sessionId);
+
+        // DB는 최신 10개를 뽑기 위해 DESC로 조회하지만 AI는 대화 순서대로 ASC를 기대하므로 메모리에서 재정렬.
+        // createdAt이 동일할 때 stable sort가 조회 순서(id DESC)를 유지하면 같은 시각 메시지가 역순이 되므로 id를 tie-breaker로 추가.
+        List<AiChatRequest.HistoryEntry> history = chatMessageRepository
+                .findTop10BySessionIdOrderByCreatedAtDescIdDesc(sessionId)
+                .stream()
+                .sorted(Comparator.comparing(ChatMessage::getCreatedAt)
+                        .thenComparing(ChatMessage::getId))
+                .map(m -> new AiChatRequest.HistoryEntry(m.getRole().getValue(), m.getContent()))
+                .toList();
+
+        // AI 호출 실패·스트리밍 중단과 무관하게 사용자 입력은 히스토리로 남겨야 하므로 먼저 영속화
+        chatMessageRepository.save(ChatMessage.builder()
                 .session(session)
                 .role(MessageRole.USER)
                 .content(content)
                 .build());
-        return message.getId();
+
+        return new PreparedChat(userContext, history, isFirstMessage);
+    }
+
+    public record PreparedChat(
+            String userContext,
+            List<AiChatRequest.HistoryEntry> history,
+            boolean isFirstMessage
+    ) {
     }
 
     @Transactional

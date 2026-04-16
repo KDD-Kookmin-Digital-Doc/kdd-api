@@ -8,14 +8,7 @@ import com.kdd.chat.dto.sse.FallbackEvent;
 import com.kdd.chat.dto.sse.MetaEvent;
 import com.kdd.chat.dto.sse.SseSourceDto;
 import com.kdd.chat.dto.sse.TextEvent;
-import com.kdd.chat.entity.ChatMessage;
-import com.kdd.chat.entity.ChatSession;
 import com.kdd.chat.entity.ConfidenceLevel;
-import com.kdd.chat.repository.ChatMessageRepository;
-import com.kdd.chat.repository.ChatSessionRepository;
-import com.kdd.global.error.BusinessException;
-import com.kdd.global.error.ErrorCode;
-import com.kdd.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -27,7 +20,6 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -37,9 +29,6 @@ import java.util.concurrent.atomic.AtomicReference;
 @RequiredArgsConstructor
 public class ChatMessageService {
 
-    private final ChatSessionRepository chatSessionRepository;
-    private final ChatMessageRepository chatMessageRepository;
-    private final UserContextBuilder userContextBuilder;
     private final ChatMessagePersister persister;
     private final WebClient aiServerWebClient;
 
@@ -49,45 +38,23 @@ public class ChatMessageService {
     private static final Duration AI_STREAM_MAX_IDLE = Duration.ofMinutes(10);
 
     public SseEmitter sendMessage(Long sessionId, Long userId, String content) {
-        ContextData context = prepareContext(sessionId, userId);
-        // 사용자 메시지를 저장하기 전 시점이 "세션 첫 질문" 판정 기준 — 저장 후엔 항상 false가 되어버림
-        boolean isFirstMessage = !chatMessageRepository.existsBySessionId(sessionId);
-        // AI 호출 실패·스트리밍 중단과 무관하게 사용자 입력은 히스토리로 남겨야 하므로 먼저 영속화
-        persister.saveUserMessage(sessionId, content);
+        // SSE 시작 전에 모든 DB 작업을 한 트랜잭션으로 끝내 커넥션을 즉시 반환한다.
+        // open-in-view=false 환경에서 lazy 로딩이 트랜잭션 안에서 안전하게 일어나도록 하면서,
+        // 이후 수십 초의 SSE 스트리밍 동안 HikariCP 커넥션이 점유되지 않게 한다.
+        ChatMessagePersister.PreparedChat prepared =
+                persister.prepareAndSaveUserMessage(sessionId, userId, content);
 
         AiChatRequest request = new AiChatRequest(
                 content,
                 String.valueOf(sessionId),
-                context.userContext(),
-                isFirstMessage,
-                context.history()
+                prepared.userContext(),
+                prepared.isFirstMessage(),
+                prepared.history()
         );
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         streamFromAiServer(emitter, sessionId, request);
         return emitter;
-    }
-
-    private ContextData prepareContext(Long sessionId, Long userId) {
-        ChatSession session = chatSessionRepository.findById(sessionId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
-        User user = session.getUser();
-        if (!user.getId().equals(userId)) {
-            throw new BusinessException(ErrorCode.SESSION_FORBIDDEN);
-        }
-        String userContext = userContextBuilder.buildContext(user);
-
-        // DB에서는 최신 10개를 뽑기 위해 DESC로 조회하지만, AI는 대화 순서대로 ASC를 기대하므로 메모리에서 재정렬
-        // createdAt이 동일할 때 stable sort가 조회 순서(id DESC)를 유지하면 같은 시각 메시지가 역순이 되므로 id를 tie-breaker로 추가
-        List<AiChatRequest.HistoryEntry> history = chatMessageRepository
-                .findTop10BySessionIdOrderByCreatedAtDescIdDesc(sessionId)
-                .stream()
-                .sorted(Comparator.comparing(ChatMessage::getCreatedAt)
-                        .thenComparing(ChatMessage::getId))
-                .map(m -> new AiChatRequest.HistoryEntry(m.getRole().getValue(), m.getContent()))
-                .toList();
-
-        return new ContextData(userContext, history);
     }
 
     private void streamFromAiServer(SseEmitter emitter, Long sessionId, AiChatRequest request) {
@@ -312,9 +279,4 @@ public class ChatMessageService {
         }
     }
 
-    private record ContextData(
-            String userContext,
-            List<AiChatRequest.HistoryEntry> history
-    ) {
-    }
 }
