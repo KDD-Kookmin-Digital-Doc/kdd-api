@@ -1,6 +1,6 @@
 package com.kdd.document.dto;
 
-import com.kdd.document.entity.Document;
+import com.kdd.document.repository.PopularDocumentProjection;
 
 import java.time.LocalDateTime;
 
@@ -13,18 +13,15 @@ public record PopularDocumentResponse(
         int popularityScore,
         LocalDateTime updatedAt
 ) {
-    public static PopularDocumentResponse from(Document document) {
-        int viewCount = document.getViewCount();
-        int referenceCount = 0;
-        int popularityScore = viewCount + referenceCount;
+    public static PopularDocumentResponse from(PopularDocumentProjection p) {
         return new PopularDocumentResponse(
-                document.getId(),
-                document.getTitle(),
-                document.getCategory().getName(),
-                viewCount,
-                referenceCount,
-                popularityScore,
-                document.getUpdatedAt()
+                p.getId(),
+                p.getTitle(),
+                p.getCategoryName(),
+                p.getViewCount(),
+                p.getReferenceCount(),
+                p.getPopularityScore(),
+                p.getUpdatedAt()
         );
     }
 }

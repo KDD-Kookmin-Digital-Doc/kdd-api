@@ -39,14 +39,58 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
                                 @Param("keyword") String keyword,
                                 Pageable pageable);
 
-    @EntityGraph(attributePaths = {"category"})
-    @Query("""
-            SELECT d FROM Document d
-            WHERE d.deletedAt IS NULL
-              AND d.updatedAt >= :since
-            ORDER BY d.viewCount DESC, d.updatedAt DESC, d.id DESC
-            """)
-    List<Document> findPopularSince(@Param("since") LocalDateTime since, Pageable pageable);
+    @Query(value = """
+            SELECT d.id, d.title, dc.name AS category_name,
+                   d.view_count,
+                   COALESCE(ref.cnt, 0) AS reference_count,
+                   (d.view_count + COALESCE(ref.cnt, 0)) AS popularity_score,
+                   d.updated_at
+            FROM documents d
+            JOIN document_categories dc ON dc.id = d.category_id
+            LEFT JOIN (
+                SELECT cms.document_id, COUNT(*) AS cnt
+                FROM chat_message_sources cms
+                JOIN chat_messages cm ON cm.id = cms.message_id
+                WHERE cm.created_at >= :since
+                GROUP BY cms.document_id
+            ) ref ON ref.document_id = d.id
+            WHERE d.deleted_at IS NULL
+            ORDER BY popularity_score DESC, d.id DESC
+            """, nativeQuery = true)
+    List<PopularDocumentProjection> findPopularDocuments(@Param("since") LocalDateTime since, Pageable pageable);
+
+    @Query(value = """
+            SELECT d.id, d.title, dc.name AS category_name,
+                   d.created_at, d.updated_at,
+                   (d.view_count + COALESCE(ref.cnt, 0)) AS popularity_score
+            FROM documents d
+            JOIN document_categories dc ON dc.id = d.category_id
+            LEFT JOIN (
+                SELECT cms.document_id, COUNT(*) AS cnt
+                FROM chat_message_sources cms
+                JOIN chat_messages cm ON cm.id = cms.message_id
+                WHERE cm.created_at >= :since
+                GROUP BY cms.document_id
+            ) ref ON ref.document_id = d.id
+            WHERE d.deleted_at IS NULL
+              AND (:hasCategoryFilter = false OR d.category_id IN (:categoryIds))
+              AND (:keyword IS NULL OR d.title LIKE CONCAT('%%', :keyword, '%%'))
+            ORDER BY popularity_score DESC, d.updated_at DESC, d.id DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*)
+            FROM documents d
+            WHERE d.deleted_at IS NULL
+              AND (:hasCategoryFilter = false OR d.category_id IN (:categoryIds))
+              AND (:keyword IS NULL OR d.title LIKE CONCAT('%%', :keyword, '%%'))
+            """,
+            nativeQuery = true)
+    Page<SearchByPopularityProjection> searchActiveByPopularity(
+            @Param("since") LocalDateTime since,
+            @Param("hasCategoryFilter") boolean hasCategoryFilter,
+            @Param("categoryIds") List<Long> categoryIds,
+            @Param("keyword") String keyword,
+            Pageable pageable);
 
     @Modifying
     @Query("UPDATE Document d SET d.viewCount = d.viewCount + 1 WHERE d.id = :id AND d.deletedAt IS NULL")

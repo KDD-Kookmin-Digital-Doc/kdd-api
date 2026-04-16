@@ -1,6 +1,7 @@
 package com.kdd.document.dto;
 
 import com.kdd.document.entity.Document;
+import com.kdd.document.repository.SearchByPopularityProjection;
 
 import java.time.LocalDateTime;
 
@@ -18,6 +19,16 @@ public record DocumentSearchResponse(
                 document.getCategory().getName(),
                 document.getCreatedAt(),
                 document.getUpdatedAt()
+        );
+    }
+
+    public static DocumentSearchResponse from(SearchByPopularityProjection p) {
+        return new DocumentSearchResponse(
+                p.getId(),
+                p.getTitle(),
+                p.getCategoryName(),
+                p.getCreatedAt(),
+                p.getUpdatedAt()
         );
     }
 }

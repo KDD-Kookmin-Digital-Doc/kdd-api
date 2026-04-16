@@ -11,7 +11,7 @@ import com.kdd.global.response.PageResponse;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -35,10 +35,7 @@ public class DocumentService {
     private static final int POPULAR_DAYS = 7;
     private static final int POPULAR_LIMIT = 10;
 
-    private static final Map<String, Sort> SORT_MAP = Map.of(
-            "latest", Sort.by("updatedAt", "id").descending(),
-            "popular", Sort.by(Sort.Order.desc("viewCount"), Sort.Order.desc("updatedAt"), Sort.Order.desc("id"))
-    );
+    private static final Sort SORT_LATEST = Sort.by("updatedAt", "id").descending();
 
     @Transactional
     public DocumentDetailResponse upload(MultipartFile file, DocumentUploadRequest request) {
@@ -143,7 +140,7 @@ public class DocumentService {
     public PageResponse<DocumentSearchResponse> searchDocuments(Long categoryId, String keyword,
                                                                 String sort, int page, int pageSize) {
         validatePageParams(page, pageSize);
-        Sort sortOrder = parseSort(sort);
+        validateSort(sort);
 
         List<Long> categoryIds = List.of();
         boolean hasCategoryFilter = categoryId != null;
@@ -158,16 +155,25 @@ public class DocumentService {
         String normalizedKeyword = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
         String escapedKeyword = normalizedKeyword == null ? null : escapeLike(normalizedKeyword);
 
+        if ("popular".equalsIgnoreCase(sort)) {
+            LocalDateTime since = LocalDateTime.now().minusDays(POPULAR_DAYS);
+            return PageResponse.from(
+                    documentRepository.searchActiveByPopularity(since, hasCategoryFilter, categoryIds,
+                            escapedKeyword, PageRequest.of(page, pageSize)),
+                    DocumentSearchResponse::from
+            );
+        }
+
         return PageResponse.from(
                 documentRepository.searchActive(hasCategoryFilter, categoryIds, escapedKeyword,
-                        PageRequest.of(page, pageSize, sortOrder)),
+                        PageRequest.of(page, pageSize, SORT_LATEST)),
                 DocumentSearchResponse::from
         );
     }
 
     public List<PopularDocumentResponse> getPopularDocuments() {
         LocalDateTime since = LocalDateTime.now().minusDays(POPULAR_DAYS);
-        return documentRepository.findPopularSince(since, PageRequest.of(0, POPULAR_LIMIT)).stream()
+        return documentRepository.findPopularDocuments(since, PageRequest.of(0, POPULAR_LIMIT)).stream()
                 .map(PopularDocumentResponse::from)
                 .toList();
     }
@@ -179,15 +185,11 @@ public class DocumentService {
                 .forEach(child -> collectCategoryIds(child.getId(), all, result));
     }
 
-    private Sort parseSort(String sort) {
-        if (sort == null || sort.isBlank()) {
-            return SORT_MAP.get("latest");
+    private void validateSort(String sort) {
+        if (sort == null || sort.isBlank() || "latest".equalsIgnoreCase(sort) || "popular".equalsIgnoreCase(sort)) {
+            return;
         }
-        Sort result = SORT_MAP.get(sort.toLowerCase());
-        if (result == null) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT);
-        }
-        return result;
+        throw new BusinessException(ErrorCode.INVALID_INPUT);
     }
 
     private String escapeLike(String keyword) {
