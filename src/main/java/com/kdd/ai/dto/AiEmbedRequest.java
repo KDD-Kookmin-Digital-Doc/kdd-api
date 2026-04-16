@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -12,7 +13,7 @@ import java.util.List;
  */
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AiEmbedRequest(
-        String docId,
+        Long docId,
         Metadata metadata,
         List<Chunk> chunks
 ) {
@@ -22,13 +23,13 @@ public record AiEmbedRequest(
     public record Metadata(
             String docName,
             String category,
-            String enforcementDate
+            LocalDate enforcementDate
     ) {
     }
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record Chunk(
-            String chunkId,
+            Long chunkId,
             String content,
             int page
     ) {

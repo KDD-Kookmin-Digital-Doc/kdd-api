@@ -19,7 +19,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record AiEmbedResponse(
         String status,
-        String docId,
+        Long docId,
         int embeddedChunkCount,
         List<FailedChunk> failedChunks,
         String message

@@ -280,7 +280,7 @@ public class DocumentService {
 
         // 트랜잭션 밖에서 AI 기존 벡터 삭제 (실패해도 진행, 멱등성 보장)
         try {
-            aiServerClient.deleteDocument(String.valueOf(documentId));
+            aiServerClient.deleteDocument(documentId);
         } catch (AiServerException e) {
             log.error("[AI] reprocess delete step failed for doc_id={}, continuing", documentId, e);
         }
@@ -304,7 +304,7 @@ public class DocumentService {
         persistenceService.assertActiveExists(documentId);
 
         try {
-            aiServerClient.deleteDocument(String.valueOf(documentId));
+            aiServerClient.deleteDocument(documentId);
         } catch (AiServerException e) {
             log.error("[AI] delete call failed for doc_id={}, continuing with BE deletion", documentId, e);
         }

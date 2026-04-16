@@ -153,13 +153,13 @@ public class DocumentPersistenceService {
         );
         List<AiEmbedRequest.Chunk> aiChunks = chunks.stream()
                 .map(c -> new AiEmbedRequest.Chunk(
-                        String.valueOf(c.getId()),
+                        c.getId(),
                         c.getContent(),
                         c.getPage() == null ? 1 : c.getPage()
                 ))
                 .toList();
         return new AiEmbedRequest(
-                String.valueOf(document.getId()),
+                document.getId(),
                 metadata,
                 aiChunks
         );

@@ -12,7 +12,7 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record AiDeleteResponse(
         String status,
-        String docId,
+        Long docId,
         int deletedChunkCount,
         int invalidatedCacheCount,
         String message
