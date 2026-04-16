@@ -6,8 +6,8 @@ public interface PopularDocumentProjection {
     Long getId();
     String getTitle();
     String getCategoryName();
-    int getViewCount();
-    int getReferenceCount();
-    int getPopularityScore();
+    long getViewCount();
+    long getReferenceCount();
+    long getPopularityScore();
     LocalDateTime getUpdatedAt();
 }

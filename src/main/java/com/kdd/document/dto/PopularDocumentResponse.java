@@ -8,9 +8,9 @@ public record PopularDocumentResponse(
         Long documentId,
         String title,
         String category,
-        int viewCount,
-        int referenceCount,
-        int popularityScore,
+        long viewCount,
+        long referenceCount,
+        long popularityScore,
         LocalDateTime updatedAt
 ) {
     public static PopularDocumentResponse from(PopularDocumentProjection p) {

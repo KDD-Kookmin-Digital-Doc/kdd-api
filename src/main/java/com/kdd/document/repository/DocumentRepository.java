@@ -48,7 +48,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
             FROM documents d
             JOIN document_categories dc ON dc.id = d.category_id
             LEFT JOIN (
-                SELECT cms.document_id, COUNT(*) AS cnt
+                SELECT cms.document_id, COUNT(DISTINCT cms.message_id) AS cnt
                 FROM chat_message_sources cms
                 JOIN chat_messages cm ON cm.id = cms.message_id
                 WHERE cm.created_at >= :since
@@ -66,7 +66,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
             FROM documents d
             JOIN document_categories dc ON dc.id = d.category_id
             LEFT JOIN (
-                SELECT cms.document_id, COUNT(*) AS cnt
+                SELECT cms.document_id, COUNT(DISTINCT cms.message_id) AS cnt
                 FROM chat_message_sources cms
                 JOIN chat_messages cm ON cm.id = cms.message_id
                 WHERE cm.created_at >= :since
@@ -92,7 +92,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
             @Param("keyword") String keyword,
             Pageable pageable);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE Document d SET d.viewCount = d.viewCount + 1 WHERE d.id = :id AND d.deletedAt IS NULL")
     void incrementViewCount(@Param("id") Long id);
 }
