@@ -142,7 +142,7 @@ public class DocumentService {
         validatePageParams(page, pageSize);
         validateSort(sort);
 
-        List<Long> categoryIds = List.of();
+        List<Long> categoryIds = List.of(-1L);
         boolean hasCategoryFilter = categoryId != null;
         if (hasCategoryFilter) {
             categoryRepository.findById(categoryId)
