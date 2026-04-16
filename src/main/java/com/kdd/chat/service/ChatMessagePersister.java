@@ -50,15 +50,14 @@ public class ChatMessagePersister {
         }
         String userContext = userContextBuilder.buildContext(user);
 
-        // 사용자 메시지 저장 전에 isFirstMessage 판정과 히스토리 조회를 끝내야 한다.
+        // 사용자 메시지 저장 전에 히스토리 조회와 isFirstMessage 판정을 끝내야 한다.
         // Hibernate auto-flush로 save 이후 쿼리는 방금 저장한 메시지를 포함하게 되므로 순서가 중요.
-        boolean isFirstMessage = !chatMessageRepository.existsBySessionId(sessionId);
-
         // DB는 최신 10개를 뽑기 위해 DESC로 조회하지만 AI는 대화 순서대로 ASC를 기대하므로 메모리에서 재정렬.
         // createdAt이 동일할 때 stable sort가 조회 순서(id DESC)를 유지하면 같은 시각 메시지가 역순이 되므로 id를 tie-breaker로 추가.
-        List<AiChatRequest.HistoryEntry> history = chatMessageRepository
-                .findTop10BySessionIdOrderByCreatedAtDescIdDesc(sessionId)
-                .stream()
+        List<ChatMessage> recentMessages = chatMessageRepository
+                .findTop10BySessionIdOrderByCreatedAtDescIdDesc(sessionId);
+        boolean isFirstMessage = recentMessages.isEmpty();
+        List<AiChatRequest.HistoryEntry> history = recentMessages.stream()
                 .sorted(Comparator.comparing(ChatMessage::getCreatedAt)
                         .thenComparing(ChatMessage::getId))
                 .map(m -> new AiChatRequest.HistoryEntry(m.getRole().getValue(), m.getContent()))
