@@ -57,7 +57,7 @@ public class AiServerClient {
      * AI 서버에 문서 청크 일괄 삭제 요청.
      * 존재하지 않는 doc_id도 성공 반환한다고 명세서에 명시됨 (멱등성).
      */
-    public AiDeleteResponse deleteDocument(String docId) {
+    public AiDeleteResponse deleteDocument(Long docId) {
         log.info("[AI] delete call: doc_id={}", docId);
         try {
             AiDeleteResponse response = aiServerRestClient.delete()
