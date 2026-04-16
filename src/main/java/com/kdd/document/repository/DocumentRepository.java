@@ -74,7 +74,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
             ) ref ON ref.document_id = d.id
             WHERE d.deleted_at IS NULL
               AND (:hasCategoryFilter = false OR d.category_id IN (:categoryIds))
-              AND (:keyword IS NULL OR d.title LIKE CONCAT('%%', :keyword, '%%'))
+              AND (:keyword IS NULL OR d.title LIKE CONCAT('%%', :keyword, '%%') ESCAPE '\\')
             ORDER BY popularity_score DESC, d.updated_at DESC, d.id DESC
             """,
             countQuery = """
@@ -82,7 +82,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
             FROM documents d
             WHERE d.deleted_at IS NULL
               AND (:hasCategoryFilter = false OR d.category_id IN (:categoryIds))
-              AND (:keyword IS NULL OR d.title LIKE CONCAT('%%', :keyword, '%%'))
+              AND (:keyword IS NULL OR d.title LIKE CONCAT('%%', :keyword, '%%') ESCAPE '\\')
             """,
             nativeQuery = true)
     Page<SearchByPopularityProjection> searchActiveByPopularity(
