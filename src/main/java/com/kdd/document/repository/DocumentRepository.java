@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -30,10 +31,11 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     @Query("""
             SELECT d FROM Document d
             WHERE d.deletedAt IS NULL
-              AND (:categoryIds IS NULL OR d.category.id IN :categoryIds)
+              AND (:hasCategoryFilter = false OR d.category.id IN :categoryIds)
               AND (:keyword IS NULL OR d.title LIKE CONCAT('%', :keyword, '%') ESCAPE '\\')
             """)
-    Page<Document> searchActive(@Param("categoryIds") List<Long> categoryIds,
+    Page<Document> searchActive(@Param("hasCategoryFilter") boolean hasCategoryFilter,
+                                @Param("categoryIds") List<Long> categoryIds,
                                 @Param("keyword") String keyword,
                                 Pageable pageable);
 
@@ -45,4 +47,8 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
             ORDER BY d.viewCount DESC, d.updatedAt DESC, d.id DESC
             """)
     List<Document> findPopularSince(@Param("since") LocalDateTime since, Pageable pageable);
+
+    @Modifying
+    @Query("UPDATE Document d SET d.viewCount = d.viewCount + 1 WHERE d.id = :id AND d.deletedAt IS NULL")
+    void incrementViewCount(@Param("id") Long id);
 }

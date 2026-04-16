@@ -36,8 +36,8 @@ public class DocumentService {
     private static final int POPULAR_LIMIT = 10;
 
     private static final Map<String, Sort> SORT_MAP = Map.of(
-            "latest", Sort.by("createdAt", "id").descending(),
-            "popular", Sort.by(Sort.Order.desc("viewCount"), Sort.Order.desc("createdAt"), Sort.Order.desc("id"))
+            "latest", Sort.by("updatedAt", "id").descending(),
+            "popular", Sort.by(Sort.Order.desc("viewCount"), Sort.Order.desc("updatedAt"), Sort.Order.desc("id"))
     );
 
     @Transactional
@@ -135,8 +135,8 @@ public class DocumentService {
 
     @Transactional
     public DocumentDetailPublicResponse getDocumentDetail(Long documentId) {
+        documentRepository.incrementViewCount(documentId);
         Document document = findDocumentOrThrow(documentId);
-        document.incrementViewCount();
         return DocumentDetailPublicResponse.from(document);
     }
 
@@ -145,8 +145,9 @@ public class DocumentService {
         validatePageParams(page, pageSize);
         Sort sortOrder = parseSort(sort);
 
-        List<Long> categoryIds = null;
-        if (categoryId != null) {
+        List<Long> categoryIds = List.of();
+        boolean hasCategoryFilter = categoryId != null;
+        if (hasCategoryFilter) {
             categoryRepository.findById(categoryId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
             List<DocumentCategory> all = categoryRepository.findAllOrdered();
@@ -158,7 +159,7 @@ public class DocumentService {
         String escapedKeyword = normalizedKeyword == null ? null : escapeLike(normalizedKeyword);
 
         return PageResponse.from(
-                documentRepository.searchActive(categoryIds, escapedKeyword,
+                documentRepository.searchActive(hasCategoryFilter, categoryIds, escapedKeyword,
                         PageRequest.of(page, pageSize, sortOrder)),
                 DocumentSearchResponse::from
         );

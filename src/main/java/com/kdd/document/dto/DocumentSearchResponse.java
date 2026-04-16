@@ -8,6 +8,7 @@ public record DocumentSearchResponse(
         Long documentId,
         String title,
         String category,
+        LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
     public static DocumentSearchResponse from(Document document) {
@@ -15,6 +16,7 @@ public record DocumentSearchResponse(
                 document.getId(),
                 document.getTitle(),
                 document.getCategory().getName(),
+                document.getCreatedAt(),
                 document.getUpdatedAt()
         );
     }
