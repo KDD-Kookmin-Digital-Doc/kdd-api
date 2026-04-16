@@ -16,7 +16,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -52,9 +54,17 @@ public class ChatMessagePersister {
                 .build());
 
         if (sources != null) {
+            // (message_id, document_chunk_id) 유니크 제약 위반으로 트랜잭션 전체가 롤백되어
+            // 답변이 유실되지 않도록, AI 응답 내 중복 chunk 참조는 첫 1건만 반영
+            Set<Long> seenChunkIds = new HashSet<>();
             for (AiSourceRaw src : sources) {
                 if (src.chunkId() == null || src.docId() == null) {
                     log.warn("AI source missing identifiers, skipping: docId={}, chunkId={}",
+                            src.docId(), src.chunkId());
+                    continue;
+                }
+                if (!seenChunkIds.add(src.chunkId())) {
+                    log.warn("Duplicate source chunk in AI response, skipping: docId={}, chunkId={}",
                             src.docId(), src.chunkId());
                     continue;
                 }
