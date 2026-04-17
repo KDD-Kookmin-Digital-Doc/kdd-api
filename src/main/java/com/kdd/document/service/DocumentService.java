@@ -8,8 +8,10 @@ import com.kdd.document.repository.DocumentRepository;
 import com.kdd.global.error.BusinessException;
 import com.kdd.global.error.ErrorCode;
 import com.kdd.global.response.PageResponse;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -30,6 +32,10 @@ public class DocumentService {
 
     private static final int CHUNK_SIZE = 550;
     private static final int CHUNK_OVERLAP = 100;
+    private static final int POPULAR_DAYS = 7;
+    private static final int POPULAR_LIMIT = 10;
+
+    private static final Sort SORT_LATEST = Sort.by("updatedAt", "id").descending();
 
     @Transactional
     public DocumentDetailResponse upload(MultipartFile file, DocumentUploadRequest request) {
@@ -122,6 +128,75 @@ public class DocumentService {
                         PageRequest.of(page, pageSize, Sort.by("updatedAt", "id").descending())),
                 DocumentByCategoryResponse::from
         );
+    }
+
+    @Transactional
+    public DocumentDetailPublicResponse getDocumentDetail(Long documentId) {
+        documentRepository.incrementViewCount(documentId);
+        Document document = findDocumentOrThrow(documentId);
+        return DocumentDetailPublicResponse.from(document);
+    }
+
+    public PageResponse<DocumentSearchResponse> searchDocuments(Long categoryId, String keyword,
+                                                                String sort, int page, int pageSize) {
+        validatePageParams(page, pageSize);
+        validateSort(sort);
+
+        List<Long> categoryIds = List.of(-1L);
+        boolean hasCategoryFilter = categoryId != null;
+        if (hasCategoryFilter) {
+            categoryRepository.findById(categoryId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
+            List<DocumentCategory> all = categoryRepository.findAllOrdered();
+            categoryIds = new ArrayList<>();
+            collectCategoryIds(categoryId, all, categoryIds);
+        }
+
+        String normalizedKeyword = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
+        String escapedKeyword = normalizedKeyword == null ? null : escapeLike(normalizedKeyword);
+
+        if ("popular".equalsIgnoreCase(sort)) {
+            LocalDateTime since = LocalDateTime.now().minusDays(POPULAR_DAYS);
+            return PageResponse.from(
+                    documentRepository.searchActiveByPopularity(since, hasCategoryFilter, categoryIds,
+                            escapedKeyword, PageRequest.of(page, pageSize)),
+                    DocumentSearchResponse::from
+            );
+        }
+
+        return PageResponse.from(
+                documentRepository.searchActive(hasCategoryFilter, categoryIds, escapedKeyword,
+                        PageRequest.of(page, pageSize, SORT_LATEST)),
+                DocumentSearchResponse::from
+        );
+    }
+
+    public List<PopularDocumentResponse> getPopularDocuments() {
+        LocalDateTime since = LocalDateTime.now().minusDays(POPULAR_DAYS);
+        return documentRepository.findPopularDocuments(since, PageRequest.of(0, POPULAR_LIMIT)).stream()
+                .map(PopularDocumentResponse::from)
+                .toList();
+    }
+
+    private void collectCategoryIds(Long parentId, List<DocumentCategory> all, List<Long> result) {
+        result.add(parentId);
+        all.stream()
+                .filter(c -> c.getParent() != null && c.getParent().getId().equals(parentId))
+                .forEach(child -> collectCategoryIds(child.getId(), all, result));
+    }
+
+    private void validateSort(String sort) {
+        if (sort == null || sort.isBlank() || "latest".equalsIgnoreCase(sort) || "popular".equalsIgnoreCase(sort)) {
+            return;
+        }
+        throw new BusinessException(ErrorCode.INVALID_INPUT);
+    }
+
+    private String escapeLike(String keyword) {
+        return keyword
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 
     public PageResponse<DocumentListResponse> getDocuments(int page, int size) {
