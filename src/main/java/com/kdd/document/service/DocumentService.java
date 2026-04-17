@@ -83,7 +83,11 @@ public class DocumentService {
         );
 
         // PDF 파싱 실패 또는 빈 컨텐츠는 AI 호출 없이 종료
+        // initialStatus=PROCESSING인데 embedRequest가 null이면 청킹 결과가 0개인 비정상 케이스 → FAILED로 명시 전이
         if (initialStatus == DocumentStatus.FAILED || payload.embedRequest() == null) {
+            if (initialStatus == DocumentStatus.PROCESSING) {
+                persistenceService.updateStatus(payload.documentId(), DocumentStatus.FAILED);
+            }
             return DocumentDetailResponse.from(persistenceService.findActiveForResponse(payload.documentId()));
         }
 

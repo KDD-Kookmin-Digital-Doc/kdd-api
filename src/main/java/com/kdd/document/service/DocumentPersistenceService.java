@@ -131,6 +131,10 @@ public class DocumentPersistenceService {
         int start = 0;
         while (start < content.length()) {
             int end = Math.min(start + CHUNK_SIZE, content.length());
+            // 이모지 등 서로게이트 페어(U+10000 이상)가 경계에서 쪼개져 깨진 문자가 임베딩에 섞이지 않도록 보정
+            if (end < content.length() && Character.isHighSurrogate(content.charAt(end - 1))) {
+                end--;
+            }
             String chunk = content.substring(start, end).strip();
             if (!chunk.isEmpty()) {
                 chunks.add(DocumentChunk.builder()
@@ -140,7 +144,11 @@ public class DocumentPersistenceService {
                         .hasTable(false)
                         .build());
             }
-            start += CHUNK_SIZE - CHUNK_OVERLAP;
+            int nextStart = start + CHUNK_SIZE - CHUNK_OVERLAP;
+            if (nextStart < content.length() && Character.isLowSurrogate(content.charAt(nextStart))) {
+                nextStart++;
+            }
+            start = nextStart;
         }
         return chunkRepository.saveAll(chunks);
     }
