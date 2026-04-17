@@ -42,6 +42,7 @@ public class DocumentPersistenceService {
     public SavePayload saveDocumentAndBuildEmbedRequest(
             String title,
             String content,
+            List<String> pageTexts,
             Long categoryId,
             DocumentSource source,
             String originalFilename,
@@ -61,13 +62,17 @@ public class DocumentPersistenceService {
                 .fileSize(fileSize)
                 .status(initialStatus)
                 .build();
-        documentRepository.save(document);
+        // saveAndFlush로 PK 즉시 할당하여 AI embed 요청에 Long 타입 chunk_id가 null이 되지 않도록 보장
+        documentRepository.saveAndFlush(document);
 
-        if (initialStatus == DocumentStatus.FAILED || content == null || content.isBlank()) {
+        if (initialStatus == DocumentStatus.FAILED || pageTexts == null || pageTexts.isEmpty()) {
             return new SavePayload(document.getId(), null);
         }
 
-        List<DocumentChunk> chunks = createAndSaveChunks(document, content);
+        List<DocumentChunk> chunks = createAndSaveChunks(document, pageTexts);
+        if (chunks.isEmpty()) {
+            return new SavePayload(document.getId(), null);
+        }
         AiEmbedRequest embedRequest = buildEmbedRequest(document, chunks);
         return new SavePayload(document.getId(), embedRequest);
     }
@@ -125,39 +130,56 @@ public class DocumentPersistenceService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND));
     }
 
-    private List<DocumentChunk> createAndSaveChunks(Document document, String content) {
+    private List<DocumentChunk> createAndSaveChunks(Document document, List<String> pageTexts) {
         List<DocumentChunk> chunks = new ArrayList<>();
         int idx = 0;
-        int start = 0;
-        while (start < content.length()) {
-            int end = Math.min(start + CHUNK_SIZE, content.length());
-            // 이모지 등 서로게이트 페어(U+10000 이상)가 경계에서 쪼개져 깨진 문자가 임베딩에 섞이지 않도록 보정
-            if (end < content.length() && Character.isHighSurrogate(content.charAt(end - 1))) {
-                end--;
+        // 페이지별로 독립 청킹하여 청크가 페이지 경계를 넘지 않도록 보장 (RAG 출처 page 태깅 정확도 확보)
+        for (int pageIdx = 0; pageIdx < pageTexts.size(); pageIdx++) {
+            String pageContent = pageTexts.get(pageIdx);
+            if (pageContent == null || pageContent.isBlank()) continue;
+            int pageNumber = pageIdx + 1;
+
+            int start = 0;
+            while (start < pageContent.length()) {
+                int end = Math.min(start + CHUNK_SIZE, pageContent.length());
+                // 이모지 등 서로게이트 페어(U+10000 이상)가 경계에서 쪼개져 깨진 문자가 임베딩에 섞이지 않도록 보정
+                if (end < pageContent.length() && Character.isHighSurrogate(pageContent.charAt(end - 1))) {
+                    end--;
+                }
+                String chunkText = pageContent.substring(start, end).strip();
+                if (!chunkText.isEmpty()) {
+                    chunks.add(DocumentChunk.builder()
+                            .document(document)
+                            .content(chunkText)
+                            .chunkIndex(idx++)
+                            .page(pageNumber)
+                            .hasTable(false)
+                            .build());
+                }
+                int nextStart = start + CHUNK_SIZE - CHUNK_OVERLAP;
+                if (nextStart < pageContent.length() && Character.isLowSurrogate(pageContent.charAt(nextStart))) {
+                    nextStart++;
+                }
+                start = nextStart;
             }
-            String chunk = content.substring(start, end).strip();
-            if (!chunk.isEmpty()) {
-                chunks.add(DocumentChunk.builder()
-                        .document(document)
-                        .content(chunk)
-                        .chunkIndex(idx++)
-                        .hasTable(false)
-                        .build());
-            }
-            int nextStart = start + CHUNK_SIZE - CHUNK_OVERLAP;
-            if (nextStart < content.length() && Character.isLowSurrogate(content.charAt(nextStart))) {
-                nextStart++;
-            }
-            start = nextStart;
         }
-        return chunkRepository.saveAll(chunks);
+        // saveAllAndFlush로 PK 즉시 할당 (batch_size 설정 변경 대비)
+        return chunkRepository.saveAllAndFlush(chunks);
     }
 
     private AiEmbedRequest buildEmbedRequest(Document document, List<DocumentChunk> chunks) {
+        // AI 서버가 doc_name/category를 min_length=1로 검증하므로 null/blank 방어
+        String docName = (document.getOriginalFilename() != null && !document.getOriginalFilename().isBlank())
+                ? document.getOriginalFilename()
+                : document.getTitle();
+        String categoryName = (document.getCategory() != null && document.getCategory().getName() != null
+                && !document.getCategory().getName().isBlank())
+                ? document.getCategory().getName()
+                : "미분류";
         AiEmbedRequest.Metadata metadata = new AiEmbedRequest.Metadata(
-                document.getOriginalFilename(),
-                document.getCategory() == null ? "" : document.getCategory().getName(),
-                null // enforcement_date: 의도적으로 null, 시행일 메타데이터 정책 확정 후 반영 예정
+                docName,
+                categoryName,
+                null // enforcement_date: 의도적으로 null, AI 서버가 Optional[date]로 전환한 뒤 시행일 정책 확정하면 반영 예정
         );
         List<AiEmbedRequest.Chunk> aiChunks = chunks.stream()
                 .map(c -> new AiEmbedRequest.Chunk(

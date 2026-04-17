@@ -58,19 +58,26 @@ public class DocumentService {
         String originalFilename = file.getOriginalFilename();
         String title = resolveTitle(request.getTitle(), originalFilename);
 
-        // PDF 텍스트 추출 (트랜잭션 없음)
-        String content = "";
+        // PDF 텍스트 추출 (트랜잭션 없음, 페이지별 분리하여 청크 tagging용 정보 확보)
+        List<String> pageTexts = List.of();
         DocumentStatus initialStatus = DocumentStatus.PROCESSING;
         try (var pdfDoc = org.apache.pdfbox.Loader.loadPDF(file.getBytes())) {
-            content = new org.apache.pdfbox.text.PDFTextStripper().getText(pdfDoc);
+            var stripper = new org.apache.pdfbox.text.PDFTextStripper();
+            int pageCount = pdfDoc.getNumberOfPages();
+            List<String> pages = new ArrayList<>(pageCount);
+            for (int i = 1; i <= pageCount; i++) {
+                stripper.setStartPage(i);
+                stripper.setEndPage(i);
+                String pageText = stripper.getText(pdfDoc);
+                pages.add(pageText == null ? "" : pageText.replace("\u0000", ""));
+            }
+            pageTexts = pages;
         } catch (Exception e) {
             log.warn("PDF 텍스트 추출 실패: {}", e.getMessage());
             initialStatus = DocumentStatus.FAILED;
         }
 
-        if (!content.isBlank()) {
-            content = content.replace("\u0000", "");
-        }
+        String content = String.join("\n", pageTexts);
         if (initialStatus == DocumentStatus.PROCESSING && content.isBlank()) {
             initialStatus = DocumentStatus.FAILED;
         }
@@ -79,7 +86,7 @@ public class DocumentService {
 
         // 1차 트랜잭션: 저장 + embed 요청 body 준비
         DocumentPersistenceService.SavePayload payload = persistenceService.saveDocumentAndBuildEmbedRequest(
-                title, content, request.getCategoryId(), source, originalFilename, file.getSize(), initialStatus
+                title, content, pageTexts, request.getCategoryId(), source, originalFilename, file.getSize(), initialStatus
         );
 
         // PDF 파싱 실패 또는 빈 컨텐츠는 AI 호출 없이 종료
