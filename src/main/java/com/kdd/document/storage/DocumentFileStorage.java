@@ -1,0 +1,83 @@
+package com.kdd.document.storage;
+
+import com.kdd.global.error.BusinessException;
+import com.kdd.global.error.ErrorCode;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.UUID;
+
+/**
+ * 업로드된 PDF 파일을 디스크에 저장하고 다시 스트리밍으로 서빙한다.
+ * storageKey는 디렉터리 경로와 분리된 파일 식별자 (경로 traversal 방지를 위해 Path.resolve 결과가 루트 아래인지 검증).
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class DocumentFileStorage {
+
+    private final DocumentStorageProperties properties;
+    private Path rootDir;
+
+    @PostConstruct
+    void init() {
+        this.rootDir = Paths.get(properties.getUploadDir()).toAbsolutePath().normalize();
+        try {
+            Files.createDirectories(rootDir);
+        } catch (IOException e) {
+            throw new IllegalStateException("업로드 디렉터리 생성 실패: " + rootDir, e);
+        }
+        log.info("Document storage root: {}", rootDir);
+    }
+
+    /**
+     * 파일을 저장하고 storageKey(루트 기준 상대 파일명)를 반환한다.
+     */
+    public String store(MultipartFile file) {
+        String storageKey = UUID.randomUUID() + ".pdf";
+        Path target = resolveSafe(storageKey);
+        try {
+            file.transferTo(target);
+        } catch (IOException e) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR);
+        }
+        return storageKey;
+    }
+
+    public Resource loadAsResource(String storageKey) {
+        Path target = resolveSafe(storageKey);
+        if (!Files.exists(target) || !Files.isRegularFile(target)) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+        try {
+            Resource resource = new UrlResource(target.toUri());
+            if (!resource.isReadable()) {
+                throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+            }
+            return resource;
+        } catch (MalformedURLException e) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR);
+        }
+    }
+
+    private Path resolveSafe(String storageKey) {
+        if (storageKey == null || storageKey.isBlank()) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+        Path resolved = rootDir.resolve(storageKey).normalize();
+        if (!resolved.startsWith(rootDir)) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+        return resolved;
+    }
+}

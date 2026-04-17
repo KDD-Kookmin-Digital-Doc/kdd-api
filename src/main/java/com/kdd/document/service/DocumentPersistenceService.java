@@ -46,6 +46,7 @@ public class DocumentPersistenceService {
             Long categoryId,
             DocumentSource source,
             String originalFilename,
+            String storageKey,
             long fileSize,
             DocumentStatus initialStatus
     ) {
@@ -58,6 +59,7 @@ public class DocumentPersistenceService {
                 .category(category)
                 .source(source)
                 .originalFilename(originalFilename)
+                .storageKey(storageKey)
                 .mimeType("application/pdf")
                 .fileSize(fileSize)
                 .status(initialStatus)

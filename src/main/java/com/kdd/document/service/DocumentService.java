@@ -8,6 +8,7 @@ import com.kdd.document.dto.*;
 import com.kdd.document.entity.*;
 import com.kdd.document.repository.DocumentCategoryRepository;
 import com.kdd.document.repository.DocumentRepository;
+import com.kdd.document.storage.DocumentFileStorage;
 import com.kdd.global.error.BusinessException;
 import com.kdd.global.error.ErrorCode;
 import com.kdd.global.response.PageResponse;
@@ -32,6 +33,7 @@ public class DocumentService {
     private final DocumentCategoryRepository categoryRepository;
     private final DocumentPersistenceService persistenceService;
     private final AiServerClient aiServerClient;
+    private final DocumentFileStorage fileStorage;
 
     private static final int POPULAR_DAYS = 7;
     private static final int POPULAR_LIMIT = 10;
@@ -84,9 +86,13 @@ public class DocumentService {
 
         DocumentSource source = parseSource(request.getSource());
 
+        // PDF 원본을 디스크에 저장하여 추후 /documents/{id}/file 엔드포인트로 다시 서빙할 수 있게 한다
+        String storageKey = fileStorage.store(file);
+
         // 1차 트랜잭션: 저장 + embed 요청 body 준비
         DocumentPersistenceService.SavePayload payload = persistenceService.saveDocumentAndBuildEmbedRequest(
-                title, content, pageTexts, request.getCategoryId(), source, originalFilename, file.getSize(), initialStatus
+                title, content, pageTexts, request.getCategoryId(), source, originalFilename,
+                storageKey, file.getSize(), initialStatus
         );
 
         // PDF 파싱 실패 또는 빈 컨텐츠는 AI 호출 없이 종료
@@ -182,6 +188,20 @@ public class DocumentService {
         Document document = findDocumentOrThrow(documentId);
         return DocumentDetailPublicResponse.from(document);
     }
+
+    @Transactional(readOnly = true)
+    public DocumentFileDownload getDocumentFile(Long documentId) {
+        Document document = findDocumentOrThrow(documentId);
+        if (document.getStorageKey() == null || document.getStorageKey().isBlank()) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+        return new DocumentFileDownload(
+                fileStorage.loadAsResource(document.getStorageKey()),
+                document.getOriginalFilename() != null ? document.getOriginalFilename() : document.getTitle() + ".pdf"
+        );
+    }
+
+    public record DocumentFileDownload(org.springframework.core.io.Resource resource, String filename) {}
 
     @Transactional(readOnly = true)
     public PageResponse<DocumentSearchResponse> searchDocuments(Long categoryId, String keyword,

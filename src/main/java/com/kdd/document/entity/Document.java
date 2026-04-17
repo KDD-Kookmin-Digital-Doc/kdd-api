@@ -84,13 +84,14 @@ public class Document {
 
     @Builder
     public Document(String title, String content, DocumentCategory category,
-                    DocumentSource source, String originalFilename, String mimeType,
-                    Long fileSize, DocumentStatus status) {
+                    DocumentSource source, String originalFilename, String storageKey,
+                    String mimeType, Long fileSize, DocumentStatus status) {
         this.title = title;
         this.content = content;
         this.category = category;
         this.source = source;
         this.originalFilename = originalFilename;
+        this.storageKey = storageKey;
         this.mimeType = mimeType;
         this.fileSize = fileSize;
         this.status = (status == null) ? DocumentStatus.UPLOADED : status;
