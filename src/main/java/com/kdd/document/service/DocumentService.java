@@ -90,10 +90,17 @@ public class DocumentService {
         String storageKey = fileStorage.store(file);
 
         // 1차 트랜잭션: 저장 + embed 요청 body 준비
-        DocumentPersistenceService.SavePayload payload = persistenceService.saveDocumentAndBuildEmbedRequest(
-                title, content, pageTexts, request.getCategoryId(), source, originalFilename,
-                storageKey, file.getSize(), initialStatus
-        );
+        // DB 저장이 실패하면 디스크에 이미 쓴 PDF가 고아로 남으므로 보상 삭제 후 재던진다
+        DocumentPersistenceService.SavePayload payload;
+        try {
+            payload = persistenceService.saveDocumentAndBuildEmbedRequest(
+                    title, content, pageTexts, request.getCategoryId(), source, originalFilename,
+                    storageKey, file.getSize(), initialStatus
+            );
+        } catch (RuntimeException e) {
+            fileStorage.deleteIfExists(storageKey);
+            throw e;
+        }
 
         // PDF 파싱 실패 또는 빈 컨텐츠는 AI 호출 없이 종료
         // initialStatus=PROCESSING인데 embedRequest가 null이면 청킹 결과가 0개인 비정상 케이스 → FAILED로 명시 전이

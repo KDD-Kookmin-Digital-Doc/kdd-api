@@ -54,6 +54,21 @@ public class DocumentFileStorage {
         return storageKey;
     }
 
+    /**
+     * DB 저장 실패 등으로 발생할 수 있는 고아 파일을 정리한다.
+     * 이미 없는 파일이거나 IO 에러가 발생해도 호출자 흐름을 막지 않도록 swallow + WARN.
+     */
+    public void deleteIfExists(String storageKey) {
+        if (storageKey == null || storageKey.isBlank()) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(resolveSafe(storageKey));
+        } catch (IOException e) {
+            log.warn("저장 파일 정리 실패: storageKey={}", storageKey, e);
+        }
+    }
+
     public Resource loadAsResource(String storageKey) {
         Path target = resolveSafe(storageKey);
         if (!Files.exists(target) || !Files.isRegularFile(target)) {
