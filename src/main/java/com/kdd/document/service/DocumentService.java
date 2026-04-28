@@ -339,7 +339,8 @@ public class DocumentService {
      * </ol>
      */
     public void delete(Long documentId) {
-        persistenceService.assertActiveExists(documentId);
+        // 삭제 전 storageKey를 먼저 확보하여 BE soft delete 이후 디스크 파일도 같이 정리
+        String storageKey = persistenceService.assertActiveExistsAndGetStorageKey(documentId);
 
         try {
             aiServerClient.deleteDocument(documentId);
@@ -348,6 +349,8 @@ public class DocumentService {
         }
 
         persistenceService.hardDeleteChunksAndSoftDeleteDocument(documentId);
+        // 디스크 PDF 정리 — 실패해도 BE/AI 삭제는 이미 완료됐으므로 스왈로우 (deleteIfExists 내부에서 처리)
+        fileStorage.deleteIfExists(storageKey);
     }
 
     private Document findDocumentOrThrow(Long documentId) {
