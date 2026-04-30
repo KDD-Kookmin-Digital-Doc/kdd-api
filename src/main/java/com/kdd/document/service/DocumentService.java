@@ -199,6 +199,10 @@ public class DocumentService {
     @Transactional(readOnly = true)
     public DocumentFileDownload getDocumentFile(Long documentId) {
         Document document = findDocumentOrThrow(documentId);
+        // 일반 사용자 진입점 — 처리 완료된 문서만 통과시킨다 (PROCESSING/FAILED/REPROCESSING 등 깨진 PDF 노출 방지)
+        if (document.getStatus() != DocumentStatus.COMPLETED) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
         if (document.getStorageKey() == null || document.getStorageKey().isBlank()) {
             throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
         }
