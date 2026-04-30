@@ -12,6 +12,7 @@ import com.kdd.document.storage.DocumentFileStorage;
 import com.kdd.global.error.BusinessException;
 import com.kdd.global.error.ErrorCode;
 import com.kdd.global.response.PageResponse;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -60,10 +61,17 @@ public class DocumentService {
         String originalFilename = file.getOriginalFilename();
         String title = resolveTitle(request.getTitle(), originalFilename);
 
+        // PDF 원본을 디스크에 먼저 저장한다.
+        // - /documents/{id}/file 엔드포인트로 추후 다시 서빙
+        // - 이어지는 텍스트 추출이 file.getBytes()로 전체 바이트를 힙에 적재하지 않고
+        //   RandomAccessReadBufferedFile(4KB 페이지 캐시)로 스트리밍 파싱하도록 함 (#46 OOM 방지)
+        String storageKey = fileStorage.store(file);
+        Path storedPath = fileStorage.getPath(storageKey);
+
         // PDF 텍스트 추출 (트랜잭션 없음, 페이지별 분리하여 청크 tagging용 정보 확보)
         List<String> pageTexts = List.of();
         DocumentStatus initialStatus = DocumentStatus.PROCESSING;
-        try (var pdfDoc = org.apache.pdfbox.Loader.loadPDF(file.getBytes())) {
+        try (var pdfDoc = org.apache.pdfbox.Loader.loadPDF(storedPath.toFile())) {
             var stripper = new org.apache.pdfbox.text.PDFTextStripper();
             int pageCount = pdfDoc.getNumberOfPages();
             List<String> pages = new ArrayList<>(pageCount);
@@ -85,9 +93,6 @@ public class DocumentService {
         }
 
         DocumentSource source = parseSource(request.getSource());
-
-        // PDF 원본을 디스크에 저장하여 추후 /documents/{id}/file 엔드포인트로 다시 서빙할 수 있게 한다
-        String storageKey = fileStorage.store(file);
 
         // 1차 트랜잭션: 저장 + embed 요청 body 준비
         // DB 저장이 실패하면 디스크에 이미 쓴 PDF가 고아로 남으므로 보상 삭제 후 재던진다

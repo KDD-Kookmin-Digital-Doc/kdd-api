@@ -69,6 +69,14 @@ public class DocumentFileStorage {
         }
     }
 
+    /**
+     * 저장된 파일의 절대 경로를 반환한다.
+     * 파일 기반 스트리밍 파싱(PDFBox 등)에서 메모리 전체 로드를 피하기 위해 사용. 경로 traversal 방어는 resolveSafe에 위임.
+     */
+    public Path getPath(String storageKey) {
+        return resolveSafe(storageKey);
+    }
+
     public Resource loadAsResource(String storageKey) {
         Path target = resolveSafe(storageKey);
         if (!Files.exists(target) || !Files.isRegularFile(target)) {
