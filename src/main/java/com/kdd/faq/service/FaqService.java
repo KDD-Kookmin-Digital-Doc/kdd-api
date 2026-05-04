@@ -27,6 +27,8 @@ public class FaqService {
     private final FaqRepository faqRepository;
 
     private static final Sort SORT_LATEST = Sort.by("createdAt", "id").descending();
+    // 인증된 클라이언트가 pageSize=Integer.MAX_VALUE 등 비정상 값으로 전체 테이블을 읽어가는 것을 차단
+    private static final int MAX_PAGE_SIZE = 100;
 
     // 컴파일 타임 상수인 enum 9개를 매 호출마다 stream으로 빌드하지 않도록 1회만 캐시
     private static final List<FaqTopicResponse> TOPICS_CACHE = Arrays.stream(FaqTopic.values())
@@ -93,7 +95,7 @@ public class FaqService {
     }
 
     private void validatePageParams(int page, int pageSize) {
-        if (page < 0 || pageSize < 1) {
+        if (page < 0 || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
     }

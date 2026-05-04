@@ -105,7 +105,17 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
             @Param("keyword") String keyword,
             Pageable pageable);
 
+    /**
+     * 사용자 진입점에서만 호출. status가 COMPLETED인 활성 문서일 때만 view_count를 +1 한다.
+     * 검사 → 갱신 사이에 관리자 reprocess가 끼어들어도 race로 카운트가 새지 않도록 단일 UPDATE로 처리.
+     * @return 영향받은 row 수 (0 = 대상 문서 없음 → 호출자가 404 처리)
+     */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("UPDATE Document d SET d.viewCount = d.viewCount + 1 WHERE d.id = :id AND d.deletedAt IS NULL")
-    void incrementViewCount(@Param("id") Long id);
+    @Query("""
+            UPDATE Document d SET d.viewCount = d.viewCount + 1
+            WHERE d.id = :id
+              AND d.deletedAt IS NULL
+              AND d.status = com.kdd.document.entity.DocumentStatus.COMPLETED
+            """)
+    int incrementViewCount(@Param("id") Long id);
 }

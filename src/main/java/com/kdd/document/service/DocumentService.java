@@ -61,6 +61,9 @@ public class DocumentService {
 
         String originalFilename = file.getOriginalFilename();
         String title = resolveTitle(request.getTitle(), originalFilename);
+        // 디스크 저장 전에 요청 값(source) 검증을 끝낸다.
+        // 검증 실패가 store 이후에 일어나면 보상 흐름이 닿지 않아 디스크에 고아 PDF가 남는다.
+        DocumentSource source = parseSource(request.getSource());
 
         // PDF 원본을 디스크에 먼저 저장한다.
         // - /documents/{id}/file 엔드포인트로 추후 다시 서빙
@@ -93,8 +96,6 @@ public class DocumentService {
         if (initialStatus == DocumentStatus.PROCESSING && content.isBlank()) {
             initialStatus = DocumentStatus.FAILED;
         }
-
-        DocumentSource source = parseSource(request.getSource());
 
         // 1차 트랜잭션: 저장 + embed 요청 body 준비
         // DB 저장이 실패하면 디스크에 이미 쓴 PDF가 고아로 남으므로 보상 삭제 후 재던진다
@@ -198,12 +199,14 @@ public class DocumentService {
 
     @Transactional
     public DocumentDetailPublicResponse getDocumentDetail(Long documentId) {
-        // 사용자 진입점은 COMPLETED 문서만 노출. NOT COMPLETED → 404 (viewCount 증가도 안 됨)
-        Document document = findCompletedDocumentOrThrow(documentId);
-        documentRepository.incrementViewCount(documentId);
-        // bulk UPDATE는 영속성 컨텍스트를 비우지만 이미 메모리에 적재된 객체에는 반영 안 되므로
-        // 응답이 +1 전 값으로 나가는 stale 문제를 도메인 메서드 호출로 동기화한다.
-        document.incrementViewCount();
+        // 단일 UPDATE로 status=COMPLETED + view_count +1을 원자적으로 처리.
+        // affected rows = 0이면 대상 문서 없음(미존재 / 삭제 / NOT COMPLETED) → 404.
+        // 분리된 SELECT-then-UPDATE 흐름이 가졌던 reprocess race condition 차단.
+        int affected = documentRepository.incrementViewCount(documentId);
+        if (affected == 0) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+        Document document = findDocumentOrThrow(documentId);
         return DocumentDetailPublicResponse.from(document);
     }
 
