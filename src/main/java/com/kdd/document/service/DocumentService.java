@@ -196,18 +196,15 @@ public class DocumentService {
 
     @Transactional
     public DocumentDetailPublicResponse getDocumentDetail(Long documentId) {
+        // 사용자 진입점은 COMPLETED 문서만 노출. NOT COMPLETED → 404 (viewCount 증가도 안 됨)
+        Document document = findCompletedDocumentOrThrow(documentId);
         documentRepository.incrementViewCount(documentId);
-        Document document = findDocumentOrThrow(documentId);
         return DocumentDetailPublicResponse.from(document);
     }
 
     @Transactional(readOnly = true)
     public DocumentFileDownload getDocumentFile(Long documentId) {
-        Document document = findDocumentOrThrow(documentId);
-        // 일반 사용자 진입점 — 처리 완료된 문서만 통과시킨다 (PROCESSING/FAILED/REPROCESSING 등 깨진 PDF 노출 방지)
-        if (document.getStatus() != DocumentStatus.COMPLETED) {
-            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
-        }
+        Document document = findCompletedDocumentOrThrow(documentId);
         if (document.getStorageKey() == null || document.getStorageKey().isBlank()) {
             throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
         }
@@ -365,6 +362,18 @@ public class DocumentService {
     private Document findDocumentOrThrow(Long documentId) {
         return documentRepository.findActiveById(documentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND));
+    }
+
+    /**
+     * 일반 사용자 진입점 전용. 처리 완료된 문서만 통과시키며 그 외 status는 404로 차단한다.
+     * 관리자 진입점은 findDocumentOrThrow 사용 (모든 status 조회 가능).
+     */
+    private Document findCompletedDocumentOrThrow(Long documentId) {
+        Document document = findDocumentOrThrow(documentId);
+        if (document.getStatus() != DocumentStatus.COMPLETED) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+        return document;
     }
 
     private void validatePageParams(int page, int size) {
