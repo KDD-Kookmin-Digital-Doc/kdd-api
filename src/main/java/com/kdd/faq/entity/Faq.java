@@ -29,6 +29,7 @@ public class Faq {
     private String answer;
 
     // API 필드명은 topic, DB 컬럼은 category로 매핑 (ERD 정의)
+    @Convert(converter = FaqTopic.FaqTopicConverter.class)
     @Column(name = "category", nullable = false, length = 20)
     private FaqTopic topic;
 

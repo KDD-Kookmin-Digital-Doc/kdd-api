@@ -28,6 +28,11 @@ public class FaqService {
 
     private static final Sort SORT_LATEST = Sort.by("createdAt", "id").descending();
 
+    // 컴파일 타임 상수인 enum 9개를 매 호출마다 stream으로 빌드하지 않도록 1회만 캐시
+    private static final List<FaqTopicResponse> TOPICS_CACHE = Arrays.stream(FaqTopic.values())
+            .map(FaqTopicResponse::from)
+            .toList();
+
     @Transactional(readOnly = true)
     public PageResponse<FaqResponse> getFaqs(FaqTopic topic, int page, int pageSize) {
         validatePageParams(page, pageSize);
@@ -45,11 +50,8 @@ public class FaqService {
         return FaqResponse.from(findFaqOrThrow(faqId));
     }
 
-    @Transactional(readOnly = true)
     public List<FaqTopicResponse> getTopics() {
-        return Arrays.stream(FaqTopic.values())
-                .map(FaqTopicResponse::from)
-                .toList();
+        return TOPICS_CACHE;
     }
 
     @Transactional
@@ -64,9 +66,19 @@ public class FaqService {
 
     @Transactional
     public FaqResponse update(Long faqId, FaqUpdateRequest request) {
+        // PATCH 시맨틱: 필드 미전송(null)은 허용하되 빈 문자열은 명시적으로 거부한다.
+        // (전송 안 함 = 변경 없음, 빈 값 = 잘못된 입력)
+        rejectIfBlank(request.question());
+        rejectIfBlank(request.answer());
         Faq faq = findFaqOrThrow(faqId);
         faq.update(request.question(), request.answer(), request.topic());
         return FaqResponse.from(faq);
+    }
+
+    private void rejectIfBlank(String value) {
+        if (value != null && value.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
     }
 
     @Transactional
