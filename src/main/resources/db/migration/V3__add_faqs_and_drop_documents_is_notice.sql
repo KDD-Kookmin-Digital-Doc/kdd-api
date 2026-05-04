@@ -1,3 +1,9 @@
+-- documents.is_notice DROP COLUMN이 ACCESS EXCLUSIVE LOCK을 요구하므로
+-- 운영 트래픽이 long-running 쿼리를 잡고 있을 경우 lock 큐가 누적되어 connection pool이
+-- 고갈될 수 있다. 5초 안에 락을 획득하지 못하면 마이그레이션을 실패시키고 롤백하여
+-- 다음 배포에서 재시도하도록 보호한다.
+SET LOCAL lock_timeout = '5s';
+
 -- 1. FAQ 테이블 신설
 -- enum_faq_category와 정렬되는 소문자 CHECK 제약 (Faq 모듈 PR1)
 CREATE TABLE faqs (
