@@ -65,9 +65,6 @@ public class Document {
     @Column(name = "view_count", nullable = false)
     private int viewCount;
 
-    @Column(name = "is_notice", nullable = false)
-    private boolean isNotice;
-
     @Column(nullable = false, length = 20)
     private DocumentStatus status;
 
@@ -96,7 +93,6 @@ public class Document {
         this.fileSize = fileSize;
         this.status = (status == null) ? DocumentStatus.UPLOADED : status;
         this.viewCount = 0;
-        this.isNotice = false;
     }
 
     public void updateCategory(DocumentCategory category) {

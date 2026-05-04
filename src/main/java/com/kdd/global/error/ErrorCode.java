@@ -35,6 +35,9 @@ public enum ErrorCode {
     SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND", "존재하지 않는 채팅 세션입니다."),
     SESSION_FORBIDDEN(HttpStatus.FORBIDDEN, "SESSION_FORBIDDEN", "다른 사용자의 채팅 세션은 접근할 수 없습니다."),
 
+    // FAQ
+    FAQ_NOT_FOUND(HttpStatus.NOT_FOUND, "FAQ_NOT_FOUND", "존재하지 않는 FAQ입니다."),
+
     // Common
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "인증이 필요합니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "FORBIDDEN", "관리자 권한이 필요합니다."),
