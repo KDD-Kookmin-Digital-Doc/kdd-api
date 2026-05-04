@@ -82,7 +82,8 @@ public class DocumentService {
                 pages.add(pageText == null ? "" : pageText.replace("\u0000", ""));
             }
             pageTexts = pages;
-        } catch (Exception e) {
+        } catch (java.io.IOException | RuntimeException e) {
+            // PDFBox 손상 PDF/암호화/IO 등 추출 실패만 잡고, Error(OOM 등)는 그대로 전파한다.
             log.warn("PDF 텍스트 추출 실패: {}", e.getMessage());
             initialStatus = DocumentStatus.FAILED;
         }
@@ -199,6 +200,9 @@ public class DocumentService {
         // 사용자 진입점은 COMPLETED 문서만 노출. NOT COMPLETED → 404 (viewCount 증가도 안 됨)
         Document document = findCompletedDocumentOrThrow(documentId);
         documentRepository.incrementViewCount(documentId);
+        // bulk UPDATE는 영속성 컨텍스트를 비우지만 이미 메모리에 적재된 객체에는 반영 안 되므로
+        // 응답이 +1 전 값으로 나가는 stale 문제를 도메인 메서드 호출로 동기화한다.
+        document.incrementViewCount();
         return DocumentDetailPublicResponse.from(document);
     }
 
