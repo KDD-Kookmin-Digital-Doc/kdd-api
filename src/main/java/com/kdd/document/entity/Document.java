@@ -38,6 +38,7 @@ public class Document {
     @JoinColumn(name = "category_id", nullable = false)
     private DocumentCategory category;
 
+    @Convert(converter = DocumentSource.DocumentSourceConverter.class)
     @Column(nullable = false, length = 20)
     private DocumentSource source;
 
@@ -65,6 +66,7 @@ public class Document {
     @Column(name = "view_count", nullable = false)
     private int viewCount;
 
+    @Convert(converter = DocumentStatus.DocumentStatusConverter.class)
     @Column(nullable = false, length = 20)
     private DocumentStatus status;
 

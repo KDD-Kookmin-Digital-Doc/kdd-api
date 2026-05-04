@@ -48,9 +48,13 @@ public class Faq {
         this.topic = topic;
     }
 
+    /**
+     * PATCH 부분 업데이트: 전달된 값(non-null)만 적용한다.
+     * 빈 문자열 거부 정책은 Service 계층(rejectIfBlank)에서 일관 처리되며, 도메인은 단순한 null-skip에 집중한다.
+     */
     public void update(String question, String answer, FaqTopic topic) {
-        if (question != null && !question.isBlank()) this.question = question;
-        if (answer != null && !answer.isBlank()) this.answer = answer;
+        if (question != null) this.question = question;
+        if (answer != null) this.answer = answer;
         if (topic != null) this.topic = topic;
     }
 }
