@@ -8,6 +8,7 @@ import com.kdd.document.dto.*;
 import com.kdd.document.entity.*;
 import com.kdd.document.repository.DocumentCategoryRepository;
 import com.kdd.document.repository.DocumentRepository;
+import com.kdd.document.storage.DocumentFileStorage;
 import com.kdd.global.error.BusinessException;
 import com.kdd.global.error.ErrorCode;
 import com.kdd.global.response.PageResponse;
@@ -32,6 +33,7 @@ public class DocumentService {
     private final DocumentCategoryRepository categoryRepository;
     private final DocumentPersistenceService persistenceService;
     private final AiServerClient aiServerClient;
+    private final DocumentFileStorage fileStorage;
 
     private static final int POPULAR_DAYS = 7;
     private static final int POPULAR_LIMIT = 10;
@@ -84,10 +86,21 @@ public class DocumentService {
 
         DocumentSource source = parseSource(request.getSource());
 
+        // PDF 원본을 디스크에 저장하여 추후 /documents/{id}/file 엔드포인트로 다시 서빙할 수 있게 한다
+        String storageKey = fileStorage.store(file);
+
         // 1차 트랜잭션: 저장 + embed 요청 body 준비
-        DocumentPersistenceService.SavePayload payload = persistenceService.saveDocumentAndBuildEmbedRequest(
-                title, content, pageTexts, request.getCategoryId(), source, originalFilename, file.getSize(), initialStatus
-        );
+        // DB 저장이 실패하면 디스크에 이미 쓴 PDF가 고아로 남으므로 보상 삭제 후 재던진다
+        DocumentPersistenceService.SavePayload payload;
+        try {
+            payload = persistenceService.saveDocumentAndBuildEmbedRequest(
+                    title, content, pageTexts, request.getCategoryId(), source, originalFilename,
+                    storageKey, file.getSize(), initialStatus
+            );
+        } catch (RuntimeException e) {
+            fileStorage.deleteIfExists(storageKey);
+            throw e;
+        }
 
         // PDF 파싱 실패 또는 빈 컨텐츠는 AI 호출 없이 종료
         // initialStatus=PROCESSING인데 embedRequest가 null이면 청킹 결과가 0개인 비정상 케이스 → FAILED로 명시 전이
@@ -182,6 +195,24 @@ public class DocumentService {
         Document document = findDocumentOrThrow(documentId);
         return DocumentDetailPublicResponse.from(document);
     }
+
+    @Transactional(readOnly = true)
+    public DocumentFileDownload getDocumentFile(Long documentId) {
+        Document document = findDocumentOrThrow(documentId);
+        // 일반 사용자 진입점 — 처리 완료된 문서만 통과시킨다 (PROCESSING/FAILED/REPROCESSING 등 깨진 PDF 노출 방지)
+        if (document.getStatus() != DocumentStatus.COMPLETED) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+        if (document.getStorageKey() == null || document.getStorageKey().isBlank()) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+        return new DocumentFileDownload(
+                fileStorage.loadAsResource(document.getStorageKey()),
+                document.getOriginalFilename() != null ? document.getOriginalFilename() : document.getTitle() + ".pdf"
+        );
+    }
+
+    public record DocumentFileDownload(org.springframework.core.io.Resource resource, String filename) {}
 
     @Transactional(readOnly = true)
     public PageResponse<DocumentSearchResponse> searchDocuments(Long categoryId, String keyword,
@@ -312,7 +343,8 @@ public class DocumentService {
      * </ol>
      */
     public void delete(Long documentId) {
-        persistenceService.assertActiveExists(documentId);
+        // 삭제 전 storageKey를 먼저 확보하여 BE soft delete 이후 디스크 파일도 같이 정리
+        String storageKey = persistenceService.assertActiveExistsAndGetStorageKey(documentId);
 
         try {
             aiServerClient.deleteDocument(documentId);
@@ -321,6 +353,8 @@ public class DocumentService {
         }
 
         persistenceService.hardDeleteChunksAndSoftDeleteDocument(documentId);
+        // 디스크 PDF 정리 — 실패해도 BE/AI 삭제는 이미 완료됐으므로 스왈로우 (deleteIfExists 내부에서 처리)
+        fileStorage.deleteIfExists(storageKey);
     }
 
     private Document findDocumentOrThrow(Long documentId) {

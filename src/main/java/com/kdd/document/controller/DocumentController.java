@@ -10,9 +10,14 @@ import com.kdd.global.response.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -60,5 +65,18 @@ public class DocumentController {
     @GetMapping("/{documentId}")
     public ResponseEntity<DocumentDetailPublicResponse> getDocumentDetail(@PathVariable Long documentId) {
         return ResponseEntity.ok(documentService.getDocumentDetail(documentId));
+    }
+
+    @Operation(summary = "문서 원본 PDF 스트리밍", description = "업로드된 PDF 원본 파일을 브라우저 뷰어/다운로드용으로 내려준다.")
+    @GetMapping("/{documentId}/file")
+    public ResponseEntity<Resource> getDocumentFile(@PathVariable Long documentId) {
+        DocumentService.DocumentFileDownload download = documentService.getDocumentFile(documentId);
+        // 한글 파일명 안전 전달을 위해 RFC 5987 형식으로 인코딩
+        String encoded = URLEncoder.encode(download.filename(), StandardCharsets.UTF_8).replace("+", "%20");
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"" + encoded + "\"; filename*=UTF-8''" + encoded)
+                .body(download.resource());
     }
 }

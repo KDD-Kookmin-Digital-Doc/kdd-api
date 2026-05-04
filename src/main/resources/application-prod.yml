@@ -10,3 +10,5 @@ app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
     secure-cookie: true
+  document-storage:
+    upload-dir: /app/uploads

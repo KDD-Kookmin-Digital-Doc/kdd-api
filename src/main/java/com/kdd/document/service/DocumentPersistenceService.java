@@ -46,6 +46,7 @@ public class DocumentPersistenceService {
             Long categoryId,
             DocumentSource source,
             String originalFilename,
+            String storageKey,
             long fileSize,
             DocumentStatus initialStatus
     ) {
@@ -58,6 +59,7 @@ public class DocumentPersistenceService {
                 .category(category)
                 .source(source)
                 .originalFilename(originalFilename)
+                .storageKey(storageKey)
                 .mimeType("application/pdf")
                 .fileSize(fileSize)
                 .status(initialStatus)
@@ -111,10 +113,13 @@ public class DocumentPersistenceService {
         return new SavePayload(documentId, buildEmbedRequest(document, chunks));
     }
 
-    /** 삭제 대상 존재 여부 검증만 수행 (짧은 트랜잭션). */
+    /**
+     * 삭제 대상 존재 여부 검증과 함께 storageKey를 반환한다.
+     * 호출자가 트랜잭션 밖에서 디스크 파일을 정리할 수 있도록 키를 노출.
+     */
     @Transactional(readOnly = true)
-    public void assertActiveExists(Long documentId) {
-        findActiveOrThrow(documentId);
+    public String assertActiveExistsAndGetStorageKey(Long documentId) {
+        return findActiveOrThrow(documentId).getStorageKey();
     }
 
     /** 청크 hard delete + Document soft delete. */
