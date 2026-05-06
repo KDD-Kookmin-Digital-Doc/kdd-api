@@ -13,7 +13,7 @@
 ```bash
 # 1. 환경변수 설정
 cp .env.example .env
-# GEMINI_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, JWT_SECRET 값을 채워넣으세요
+# GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, JWT_SECRET 값을 채워넣으세요
 # JWT_SECRET 생성: openssl rand -hex 32
 
 # 2. 인프라 (DB)
