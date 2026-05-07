@@ -10,7 +10,8 @@ public record FaqResponse(
         String question,
         String answer,
         FaqTopic topic,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        LocalDateTime updatedAt
 ) {
     public static FaqResponse from(Faq faq) {
         return new FaqResponse(
@@ -18,7 +19,8 @@ public record FaqResponse(
                 faq.getQuestion(),
                 faq.getAnswer(),
                 faq.getTopic(),
-                faq.getCreatedAt()
+                faq.getCreatedAt(),
+                faq.getUpdatedAt()
         );
     }
 }
