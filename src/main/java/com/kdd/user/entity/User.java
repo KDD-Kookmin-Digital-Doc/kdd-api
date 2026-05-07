@@ -64,6 +64,10 @@ public class User {
         this.isProfileCompleted = true;
     }
 
+    public void resetProfile() {
+        this.isProfileCompleted = false;
+    }
+
     public void updateName(String name) {
         if (name != null && !name.isBlank()) {
             this.name = name;

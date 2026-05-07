@@ -3,6 +3,7 @@ package com.kdd.user.service;
 import com.kdd.global.error.BusinessException;
 import com.kdd.global.error.ErrorCode;
 import com.kdd.user.dto.CreateProfileRequest;
+import com.kdd.user.dto.ResetMyProfileResponse;
 import com.kdd.user.dto.UpdateProfileRequest;
 import com.kdd.user.dto.UserResponse;
 import com.kdd.user.entity.*;
@@ -10,10 +11,12 @@ import com.kdd.user.repository.StaffProfileRepository;
 import com.kdd.user.repository.StudentProfileRepository;
 import com.kdd.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -69,6 +72,20 @@ public class UserService {
         }
 
         return UserResponse.from(user, studentProfile, staffProfile);
+    }
+
+    @Transactional
+    public ResetMyProfileResponse resetMyProfile(Long userId) {
+        User user = findUserById(userId);
+
+        int deletedStudent = studentProfileRepository.deleteByUserId(userId);
+        int deletedStaff = staffProfileRepository.deleteByUserId(userId);
+        user.resetProfile();
+
+        log.warn("[ADMIN-TEST] User {} ({}) reset their own profile (student={}, staff={})",
+                userId, user.getEmail(), deletedStudent, deletedStaff);
+
+        return ResetMyProfileResponse.of(user, deletedStudent, deletedStaff);
     }
 
     @Transactional

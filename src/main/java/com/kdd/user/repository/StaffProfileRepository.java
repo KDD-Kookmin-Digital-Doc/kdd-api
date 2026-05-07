@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface StaffProfileRepository extends JpaRepository<StaffProfile, Long> {
 
     Optional<StaffProfile> findByUserId(Long userId);
+
+    int deleteByUserId(Long userId);
 }
