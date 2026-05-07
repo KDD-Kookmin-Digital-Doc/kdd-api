@@ -82,8 +82,8 @@ public class UserService {
         int deletedStaff = staffProfileRepository.deleteByUserId(userId);
         user.resetProfile();
 
-        log.warn("[ADMIN-TEST] User {} ({}) reset their own profile (student={}, staff={})",
-                userId, user.getEmail(), deletedStudent, deletedStaff);
+        log.warn("[ADMIN-TEST] userId={} reset own profile (deletedStudent={}, deletedStaff={})",
+                userId, deletedStudent > 0, deletedStaff > 0);
 
         return ResetMyProfileResponse.of(user, deletedStudent, deletedStaff);
     }

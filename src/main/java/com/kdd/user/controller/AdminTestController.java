@@ -6,7 +6,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,8 +26,7 @@ public class AdminTestController {
                     "회원가입 플로우(프로필 생성 페이지)를 반복 테스트할 때 사용."
     )
     @PostMapping("/reset-my-profile")
-    public ResponseEntity<ResetMyProfileResponse> resetMyProfile(Authentication authentication) {
-        Long userId = (Long) authentication.getPrincipal();
+    public ResponseEntity<ResetMyProfileResponse> resetMyProfile(@AuthenticationPrincipal Long userId) {
         ResetMyProfileResponse response = userService.resetMyProfile(userId);
         return ResponseEntity.ok(response);
     }
