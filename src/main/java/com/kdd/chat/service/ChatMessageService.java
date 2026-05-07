@@ -204,6 +204,11 @@ public class ChatMessageService {
                             AtomicBoolean clientConnected) {
         String content = node.path("content").asText("");
         contentAccumulator.append(content);
+        log.info("[SSE-DIAG] text chunk len={} preview=\"{}\" acc_len={} client_connected={}",
+                content.length(),
+                truncatePreview(content),
+                contentAccumulator.length(),
+                clientConnected.get());
         trySend(emitter, TextEvent.of(content), clientConnected);
     }
 
@@ -212,6 +217,11 @@ public class ChatMessageService {
                             AtomicReference<ConfidenceLevel> confidenceRef,
                             List<AiSourceRaw> capturedSources,
                             AtomicBoolean clientConnected) {
+        log.info("[SSE-DIAG] done received session={} final_acc_len={} tail=\"{}\" client_connected={}",
+                sessionId,
+                contentAccumulator.length(),
+                tailPreview(contentAccumulator, 40),
+                clientConnected.get());
         // 클라 연결 여부와 무관하게 DB 저장은 항상 수행 — 사용자가 돌아와서 히스토리에서 답변을 볼 수 있어야 한다
         Long messageId = persister.saveAssistantMessage(
                 sessionId,
@@ -222,6 +232,7 @@ public class ChatMessageService {
         trySend(emitter, DoneEvent.of(messageId), clientConnected);
         if (clientConnected.get()) {
             safeComplete(emitter);
+            log.info("[SSE-DIAG] safeComplete called session={}", sessionId);
         }
     }
 
@@ -250,11 +261,11 @@ public class ChatMessageService {
                                       AtomicBoolean clientConnected,
                                       AtomicBoolean terminalReceived) {
         if (terminalReceived.get()) {
-            log.debug("AI server stream closed for session {}", sessionId);
+            log.info("[SSE-DIAG] upstream Flux completed normally session={} (terminal already handled)", sessionId);
             return;
         }
         // done/error 없이 스트림이 닫히면 FE는 타임아웃까지 매달려 있고 누적본도 유실된다 — 에러로 정리
-        log.warn("AI server stream closed without terminal event for session {}", sessionId);
+        log.warn("[SSE-DIAG] upstream Flux completed WITHOUT terminal event session={}", sessionId);
         trySend(emitter, ErrorEvent.of("AI 서버와의 통신이 비정상 종료됐습니다."), clientConnected);
         if (clientConnected.get()) {
             safeComplete(emitter);
@@ -268,7 +279,8 @@ public class ChatMessageService {
         } catch (Exception e) {
             // 전송 도중 클라가 끊겼을 가능성이 큼 — 플래그를 내려 이후 이벤트는 DB 누적에만 쓰이게 한다
             clientConnected.set(false);
-            log.debug("Client disconnected during SSE send: {}", e.getMessage());
+            log.warn("[SSE-DIAG] send failed (client likely disconnected) eventClass={}: {}",
+                    event.getClass().getSimpleName(), e.getMessage());
         }
     }
 
@@ -277,6 +289,23 @@ public class ChatMessageService {
             emitter.complete();
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * 진단 전용 — 텍스트 청크의 내용을 확인하기 위한 미리보기.
+     * 줄바꿈은 \\n 으로 escape 하여 한 줄 로그로 보이게 한다.
+     */
+    private static String truncatePreview(String s) {
+        if (s == null) return "<null>";
+        String escaped = s.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+        if (escaped.length() <= 40) return escaped;
+        return escaped.substring(0, 20) + "..." + escaped.substring(escaped.length() - 20);
+    }
+
+    private static String tailPreview(StringBuilder sb, int n) {
+        int len = sb.length();
+        int start = Math.max(0, len - n);
+        return sb.substring(start).replace("\n", "\\n").replace("\r", "\\r");
     }
 
 }
