@@ -38,6 +38,7 @@ public class Document {
     @JoinColumn(name = "category_id", nullable = false)
     private DocumentCategory category;
 
+    @Convert(converter = DocumentSource.DocumentSourceConverter.class)
     @Column(nullable = false, length = 20)
     private DocumentSource source;
 
@@ -65,9 +66,7 @@ public class Document {
     @Column(name = "view_count", nullable = false)
     private int viewCount;
 
-    @Column(name = "is_notice", nullable = false)
-    private boolean isNotice;
-
+    @Convert(converter = DocumentStatus.DocumentStatusConverter.class)
     @Column(nullable = false, length = 20)
     private DocumentStatus status;
 
@@ -96,7 +95,6 @@ public class Document {
         this.fileSize = fileSize;
         this.status = (status == null) ? DocumentStatus.UPLOADED : status;
         this.viewCount = 0;
-        this.isNotice = false;
     }
 
     public void updateCategory(DocumentCategory category) {

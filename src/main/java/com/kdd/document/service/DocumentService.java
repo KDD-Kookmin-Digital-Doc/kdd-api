@@ -12,6 +12,8 @@ import com.kdd.document.storage.DocumentFileStorage;
 import com.kdd.global.error.BusinessException;
 import com.kdd.global.error.ErrorCode;
 import com.kdd.global.response.PageResponse;
+
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,11 +61,21 @@ public class DocumentService {
 
         String originalFilename = file.getOriginalFilename();
         String title = resolveTitle(request.getTitle(), originalFilename);
+        // 디스크 저장 전에 요청 값(source) 검증을 끝낸다.
+        // 검증 실패가 store 이후에 일어나면 보상 흐름이 닿지 않아 디스크에 고아 PDF가 남는다.
+        DocumentSource source = parseSource(request.getSource());
+
+        // PDF 원본을 디스크에 먼저 저장한다.
+        // - /documents/{id}/file 엔드포인트로 추후 다시 서빙
+        // - 이어지는 텍스트 추출이 file.getBytes()로 전체 바이트를 힙에 적재하지 않고
+        //   RandomAccessReadBufferedFile(4KB 페이지 캐시)로 스트리밍 파싱하도록 함 (#46 OOM 방지)
+        String storageKey = fileStorage.store(file);
+        Path storedPath = fileStorage.getPath(storageKey);
 
         // PDF 텍스트 추출 (트랜잭션 없음, 페이지별 분리하여 청크 tagging용 정보 확보)
         List<String> pageTexts = List.of();
         DocumentStatus initialStatus = DocumentStatus.PROCESSING;
-        try (var pdfDoc = org.apache.pdfbox.Loader.loadPDF(file.getBytes())) {
+        try (var pdfDoc = org.apache.pdfbox.Loader.loadPDF(storedPath.toFile())) {
             var stripper = new org.apache.pdfbox.text.PDFTextStripper();
             int pageCount = pdfDoc.getNumberOfPages();
             List<String> pages = new ArrayList<>(pageCount);
@@ -74,7 +86,8 @@ public class DocumentService {
                 pages.add(pageText == null ? "" : pageText.replace("\u0000", ""));
             }
             pageTexts = pages;
-        } catch (Exception e) {
+        } catch (java.io.IOException | RuntimeException e) {
+            // PDFBox 손상 PDF/암호화/IO 등 추출 실패만 잡고, Error(OOM 등)는 그대로 전파한다.
             log.warn("PDF 텍스트 추출 실패: {}", e.getMessage());
             initialStatus = DocumentStatus.FAILED;
         }
@@ -83,11 +96,6 @@ public class DocumentService {
         if (initialStatus == DocumentStatus.PROCESSING && content.isBlank()) {
             initialStatus = DocumentStatus.FAILED;
         }
-
-        DocumentSource source = parseSource(request.getSource());
-
-        // PDF 원본을 디스크에 저장하여 추후 /documents/{id}/file 엔드포인트로 다시 서빙할 수 있게 한다
-        String storageKey = fileStorage.store(file);
 
         // 1차 트랜잭션: 저장 + embed 요청 body 준비
         // DB 저장이 실패하면 디스크에 이미 쓴 PDF가 고아로 남으므로 보상 삭제 후 재던진다
@@ -191,18 +199,20 @@ public class DocumentService {
 
     @Transactional
     public DocumentDetailPublicResponse getDocumentDetail(Long documentId) {
-        documentRepository.incrementViewCount(documentId);
+        // 단일 UPDATE로 status=COMPLETED + view_count +1을 원자적으로 처리.
+        // affected rows = 0이면 대상 문서 없음(미존재 / 삭제 / NOT COMPLETED) → 404.
+        // 분리된 SELECT-then-UPDATE 흐름이 가졌던 reprocess race condition 차단.
+        int affected = documentRepository.incrementViewCount(documentId);
+        if (affected == 0) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
         Document document = findDocumentOrThrow(documentId);
         return DocumentDetailPublicResponse.from(document);
     }
 
     @Transactional(readOnly = true)
     public DocumentFileDownload getDocumentFile(Long documentId) {
-        Document document = findDocumentOrThrow(documentId);
-        // 일반 사용자 진입점 — 처리 완료된 문서만 통과시킨다 (PROCESSING/FAILED/REPROCESSING 등 깨진 PDF 노출 방지)
-        if (document.getStatus() != DocumentStatus.COMPLETED) {
-            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
-        }
+        Document document = findCompletedDocumentOrThrow(documentId);
         if (document.getStorageKey() == null || document.getStorageKey().isBlank()) {
             throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
         }
@@ -360,6 +370,18 @@ public class DocumentService {
     private Document findDocumentOrThrow(Long documentId) {
         return documentRepository.findActiveById(documentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND));
+    }
+
+    /**
+     * 일반 사용자 진입점 전용. 처리 완료된 문서만 통과시키며 그 외 status는 404로 차단한다.
+     * 관리자 진입점은 findDocumentOrThrow 사용 (모든 status 조회 가능).
+     */
+    private Document findCompletedDocumentOrThrow(Long documentId) {
+        Document document = findDocumentOrThrow(documentId);
+        if (document.getStatus() != DocumentStatus.COMPLETED) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+        return document;
     }
 
     private void validatePageParams(int page, int size) {

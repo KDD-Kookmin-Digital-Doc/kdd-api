@@ -23,14 +23,22 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     @Query("SELECT d FROM Document d WHERE d.id = :id AND d.deletedAt IS NULL")
     Optional<Document> findActiveById(@Param("id") Long id);
 
+    // 사용자 진입점 (카테고리 기반 조회) — COMPLETED 문서만 노출
     @EntityGraph(attributePaths = {"category"})
-    @Query("SELECT d FROM Document d WHERE d.category.id IN :categoryIds AND d.deletedAt IS NULL")
+    @Query("""
+            SELECT d FROM Document d
+            WHERE d.category.id IN :categoryIds
+              AND d.deletedAt IS NULL
+              AND d.status = com.kdd.document.entity.DocumentStatus.COMPLETED
+            """)
     Page<Document> findByCategoryIds(@Param("categoryIds") List<Long> categoryIds, Pageable pageable);
 
+    // 사용자 진입점 (검색 latest) — COMPLETED 문서만 노출
     @EntityGraph(attributePaths = {"category"})
     @Query("""
             SELECT d FROM Document d
             WHERE d.deletedAt IS NULL
+              AND d.status = com.kdd.document.entity.DocumentStatus.COMPLETED
               AND (:hasCategoryFilter = false OR d.category.id IN :categoryIds)
               AND (:keyword IS NULL OR d.title LIKE CONCAT('%', :keyword, '%') ESCAPE '\\')
             """)
@@ -39,6 +47,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
                                 @Param("keyword") String keyword,
                                 Pageable pageable);
 
+    // 사용자 진입점 (인기 문서) — COMPLETED 문서만 노출
     @Query(value = """
             SELECT d.id, d.title, dc.name AS category_name,
                    d.view_count,
@@ -55,10 +64,12 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
                 GROUP BY cms.document_id
             ) ref ON ref.document_id = d.id
             WHERE d.deleted_at IS NULL
+              AND d.status = 'completed'
             ORDER BY popularity_score DESC, d.id DESC
             """, nativeQuery = true)
     List<PopularDocumentProjection> findPopularDocuments(@Param("since") LocalDateTime since, Pageable pageable);
 
+    // 사용자 진입점 (검색 popular) — COMPLETED 문서만 노출
     @Query(value = """
             SELECT d.id, d.title, dc.name AS category_name,
                    d.created_at, d.updated_at,
@@ -73,6 +84,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
                 GROUP BY cms.document_id
             ) ref ON ref.document_id = d.id
             WHERE d.deleted_at IS NULL
+              AND d.status = 'completed'
               AND (:hasCategoryFilter = false OR d.category_id IN (:categoryIds))
               AND (:keyword IS NULL OR d.title LIKE CONCAT('%%', :keyword, '%%') ESCAPE '\\')
             ORDER BY popularity_score DESC, d.updated_at DESC, d.id DESC
@@ -81,6 +93,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
             SELECT COUNT(*)
             FROM documents d
             WHERE d.deleted_at IS NULL
+              AND d.status = 'completed'
               AND (:hasCategoryFilter = false OR d.category_id IN (:categoryIds))
               AND (:keyword IS NULL OR d.title LIKE CONCAT('%%', :keyword, '%%') ESCAPE '\\')
             """,
@@ -92,7 +105,17 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
             @Param("keyword") String keyword,
             Pageable pageable);
 
+    /**
+     * 사용자 진입점에서만 호출. status가 COMPLETED인 활성 문서일 때만 view_count를 +1 한다.
+     * 검사 → 갱신 사이에 관리자 reprocess가 끼어들어도 race로 카운트가 새지 않도록 단일 UPDATE로 처리.
+     * @return 영향받은 row 수 (0 = 대상 문서 없음 → 호출자가 404 처리)
+     */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("UPDATE Document d SET d.viewCount = d.viewCount + 1 WHERE d.id = :id AND d.deletedAt IS NULL")
-    void incrementViewCount(@Param("id") Long id);
+    @Query("""
+            UPDATE Document d SET d.viewCount = d.viewCount + 1
+            WHERE d.id = :id
+              AND d.deletedAt IS NULL
+              AND d.status = com.kdd.document.entity.DocumentStatus.COMPLETED
+            """)
+    int incrementViewCount(@Param("id") Long id);
 }
