@@ -74,7 +74,9 @@ public class FaqService {
         rejectIfBlank(request.answer());
         Faq faq = findFaqOrThrow(faqId);
         faq.update(request.question(), request.answer(), request.topic());
-        return FaqResponse.from(faq);
+        // saveAndFlush로 즉시 flush를 트리거해 @UpdateTimestamp가 발화되도록 한다.
+        // 그렇지 않으면 응답의 updatedAt이 commit 전 옛날 값으로 나가 FE에 stale 값이 노출된다.
+        return FaqResponse.from(faqRepository.saveAndFlush(faq));
     }
 
     private void rejectIfBlank(String value) {
