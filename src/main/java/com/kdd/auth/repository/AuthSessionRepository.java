@@ -21,6 +21,12 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, Long> 
             @Param("hash") String hash,
             @Param("now") LocalDateTime now);
 
+    @Query("SELECT s FROM AuthSession s JOIN FETCH s.user WHERE s.refreshTokenHash = :hash")
+    Optional<AuthSession> findByRefreshTokenHash(@Param("hash") String hash);
+
+    @Query("SELECT s FROM AuthSession s JOIN FETCH s.user WHERE s.id = :id")
+    Optional<AuthSession> findByIdWithUser(@Param("id") Long id);
+
     List<AuthSession> findAllByUserAndRevokedAtIsNull(User user);
 
     @Modifying

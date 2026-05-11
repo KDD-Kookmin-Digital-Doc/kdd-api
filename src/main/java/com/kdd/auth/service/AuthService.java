@@ -32,6 +32,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final AuthSessionRepository authSessionRepository;
     private final JwtProvider jwtProvider;
+    private final RefreshTokenReuseDetector refreshTokenReuseDetector;
 
     @Value("${app.auth.allowed-domain}")
     private String allowedDomain;
@@ -55,11 +56,11 @@ public class AuthService {
             throw new BusinessException(ErrorCode.ACCOUNT_DEACTIVATED);
         }
 
-        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getRole().name());
-        String refreshToken = jwtProvider.generateRefreshToken();
-
         revokeExistingSessions(user);
-        saveAuthSession(user, refreshToken);
+
+        String refreshToken = jwtProvider.generateRefreshToken();
+        AuthSession session = saveAuthSession(user, refreshToken);
+        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getRole().name(), session.getId());
 
         return new LoginResult(accessToken, refreshToken, user.isProfileCompleted());
     }
@@ -67,13 +68,11 @@ public class AuthService {
     @Transactional
     public RefreshResult refresh(String refreshToken) {
         String hash = hashToken(refreshToken);
+        LocalDateTime now = LocalDateTime.now();
 
         AuthSession session = authSessionRepository
-                .findValidSessionForUpdate(hash, LocalDateTime.now())
-                .orElseThrow(() -> {
-                    log.warn("Invalid refresh token attempt: hash={}", hash);
-                    return new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
-                });
+                .findValidSessionForUpdate(hash, now)
+                .orElseThrow(() -> handleInvalidRefreshToken(hash, now));
 
         User user = session.getUser();
 
@@ -82,14 +81,24 @@ public class AuthService {
             throw new BusinessException(ErrorCode.ACCOUNT_DEACTIVATED);
         }
 
-        String newAccessToken = jwtProvider.generateAccessToken(user.getId(), user.getRole().name());
-        String newRefreshToken = jwtProvider.generateRefreshToken();
-
         session.updateLastUsedAt();
         session.revoke();
-        saveAuthSession(user, newRefreshToken);
+
+        String newRefreshToken = jwtProvider.generateRefreshToken();
+        AuthSession newSession = saveAuthSession(user, newRefreshToken);
+        String newAccessToken = jwtProvider.generateAccessToken(user.getId(), user.getRole().name(), newSession.getId());
 
         return new RefreshResult(newAccessToken, newRefreshToken);
+    }
+
+    private BusinessException handleInvalidRefreshToken(String hash, LocalDateTime now) {
+        log.warn("Invalid refresh token attempt: hash={}", hash);
+        try {
+            refreshTokenReuseDetector.detectAndRevoke(hash, now);
+        } catch (Exception e) {
+            log.error("Reuse detection failed for hash={}", hash, e);
+        }
+        return new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
     }
 
     @Transactional
@@ -131,7 +140,7 @@ public class AuthService {
                 .forEach(AuthSession::revoke);
     }
 
-    private void saveAuthSession(User user, String refreshToken) {
+    private AuthSession saveAuthSession(User user, String refreshToken) {
         String hash = hashToken(refreshToken);
         LocalDateTime expiresAt = LocalDateTime.now()
                 .plusSeconds(refreshTokenExpiry / 1000);
@@ -142,7 +151,7 @@ public class AuthService {
                 .expiresAt(expiresAt)
                 .build();
 
-        authSessionRepository.save(session);
+        return authSessionRepository.save(session);
     }
 
     private String hashToken(String token) {

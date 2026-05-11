@@ -34,6 +34,9 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 
+    // Cache - Caffeine (세션 유효성 캐시)
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+
     // Google OAuth
     implementation 'com.google.api-client:google-api-client:2.3.0'
 
