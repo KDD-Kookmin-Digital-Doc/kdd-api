@@ -12,3 +12,9 @@ app:
     secure-cookie: true
   document-storage:
     upload-dir: /app/uploads
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
