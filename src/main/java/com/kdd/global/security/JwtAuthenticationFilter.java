@@ -26,6 +26,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtProvider jwtProvider;
+    private final SessionValidator sessionValidator;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
@@ -36,10 +37,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 Claims claims = jwtProvider.validateToken(token);
                 Long userId = Long.parseLong(claims.getSubject());
-                String role = claims.get("role", String.class);
+                String role = claims.get(JwtProvider.CLAIM_ROLE, String.class);
+                Long sessionId = claims.get(JwtProvider.CLAIM_SESSION_ID, Long.class);
 
                 if (role == null) {
                     log.debug("JWT has no role claim, skipping authentication");
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
+                if (sessionId == null) {
+                    log.debug("JWT has no sessionId claim — token issued before revocation support, rejecting");
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
+                if (!sessionValidator.isValid(sessionId)) {
+                    log.debug("JWT rejected — session not live: userId={}, sessionId={}", userId, sessionId);
                     filterChain.doFilter(request, response);
                     return;
                 }

@@ -13,6 +13,9 @@ import java.util.UUID;
 @Component
 public class JwtProvider {
 
+    public static final String CLAIM_SESSION_ID = "sid";
+    public static final String CLAIM_ROLE = "role";
+
     @Value("${app.jwt.secret}")
     private String secret;
 
@@ -27,13 +30,14 @@ public class JwtProvider {
         this.secretKey = Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateAccessToken(Long userId, String role) {
+    public String generateAccessToken(Long userId, String role, Long sessionId) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + accessTokenExpiry);
 
         return Jwts.builder()
                 .subject(String.valueOf(userId))
-                .claim("role", role)
+                .claim(CLAIM_ROLE, role)
+                .claim(CLAIM_SESSION_ID, sessionId)
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(secretKey)
