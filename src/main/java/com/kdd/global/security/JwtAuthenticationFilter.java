@@ -38,7 +38,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Claims claims = jwtProvider.validateToken(token);
                 Long userId = Long.parseLong(claims.getSubject());
                 String role = claims.get(JwtProvider.CLAIM_ROLE, String.class);
-                Long sessionId = claims.get(JwtProvider.CLAIM_SESSION_ID, Long.class);
+                Number sessionIdClaim = claims.get(JwtProvider.CLAIM_SESSION_ID, Number.class);
+                Long sessionId = sessionIdClaim != null ? sessionIdClaim.longValue() : null;
 
                 if (role == null) {
                     log.debug("JWT has no role claim, skipping authentication");

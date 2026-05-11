@@ -6,6 +6,7 @@ import com.kdd.auth.repository.AuthSessionRepository;
 import com.kdd.global.error.BusinessException;
 import com.kdd.global.error.ErrorCode;
 import com.kdd.global.security.JwtProvider;
+import com.kdd.global.security.SessionValidator;
 import com.kdd.user.entity.Role;
 import com.kdd.user.entity.User;
 import com.kdd.user.repository.UserRepository;
@@ -33,6 +34,7 @@ public class AuthService {
     private final AuthSessionRepository authSessionRepository;
     private final JwtProvider jwtProvider;
     private final RefreshTokenReuseDetector refreshTokenReuseDetector;
+    private final SessionValidator sessionValidator;
 
     @Value("${app.auth.allowed-domain}")
     private String allowedDomain;
@@ -81,8 +83,10 @@ public class AuthService {
             throw new BusinessException(ErrorCode.ACCOUNT_DEACTIVATED);
         }
 
+        Long oldSessionId = session.getId();
         session.updateLastUsedAt();
         session.revoke();
+        sessionValidator.invalidate(oldSessionId);
 
         String newRefreshToken = jwtProvider.generateRefreshToken();
         AuthSession newSession = saveAuthSession(user, newRefreshToken);
@@ -92,19 +96,23 @@ public class AuthService {
     }
 
     private BusinessException handleInvalidRefreshToken(String hash, LocalDateTime now) {
-        log.warn("Invalid refresh token attempt: hash={}", hash);
+        log.warn("Invalid refresh token attempt");
         try {
             refreshTokenReuseDetector.detectAndRevoke(hash, now);
         } catch (Exception e) {
-            log.error("Reuse detection failed for hash={}", hash, e);
+            log.error("Reuse detection failed during invalid refresh token handling", e);
         }
         return new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
     }
 
     @Transactional
     public void logout(Long userId) {
-        authSessionRepository.revokeAllByUserId(userId, LocalDateTime.now());
-        log.info("User logged out: userId={}", userId);
+        List<AuthSession> activeSessions = authSessionRepository.findAllActiveByUserId(userId);
+        for (AuthSession s : activeSessions) {
+            s.revoke();
+            sessionValidator.invalidate(s.getId());
+        }
+        log.info("User logged out: userId={}, revokedSessions={}", userId, activeSessions.size());
     }
 
     private void validateDomain(String email) {
@@ -136,8 +144,10 @@ public class AuthService {
     }
 
     private void revokeExistingSessions(User user) {
-        authSessionRepository.findAllByUserAndRevokedAtIsNull(user)
-                .forEach(AuthSession::revoke);
+        authSessionRepository.findAllActiveByUserId(user.getId()).forEach(s -> {
+            s.revoke();
+            sessionValidator.invalidate(s.getId());
+        });
     }
 
     private AuthSession saveAuthSession(User user, String refreshToken) {
