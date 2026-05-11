@@ -5,6 +5,7 @@ import com.kdd.global.error.ErrorCode;
 import com.kdd.user.dto.ResetMyProfileResponse;
 import com.kdd.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +35,7 @@ public class AdminTestController {
     @PostMapping("/reset-my-profile")
     public ResponseEntity<ResetMyProfileResponse> resetMyProfile(
             @AuthenticationPrincipal Long userId,
+            @Parameter(description = "실수 호출 방지용 확인 토큰. 값은 RESET-MY-PROFILE 고정.", required = true)
             @RequestParam(required = false) String confirm) {
         if (!RESET_PROFILE_CONFIRM_TOKEN.equals(confirm)) {
             throw new BusinessException(ErrorCode.CONFIRMATION_REQUIRED);
