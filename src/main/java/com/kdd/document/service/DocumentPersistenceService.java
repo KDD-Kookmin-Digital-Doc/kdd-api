@@ -1,6 +1,7 @@
 package com.kdd.document.service;
 
 import com.kdd.ai.dto.AiEmbedRequest;
+import com.kdd.chat.repository.ChatMessageSourceRepository;
 import com.kdd.document.entity.Document;
 import com.kdd.document.entity.DocumentCategory;
 import com.kdd.document.entity.DocumentChunk;
@@ -33,6 +34,7 @@ public class DocumentPersistenceService {
     private final DocumentRepository documentRepository;
     private final DocumentChunkRepository chunkRepository;
     private final DocumentCategoryRepository categoryRepository;
+    private final ChatMessageSourceRepository chatMessageSourceRepository;
 
     /**
      * Document와 Chunk를 저장하고, AI embed 요청 body를 함께 만들어 반환한다.
@@ -122,12 +124,23 @@ public class DocumentPersistenceService {
         return findActiveOrThrow(documentId).getStorageKey();
     }
 
-    /** 청크 hard delete + Document soft delete. */
+    /**
+     * 청크 hard delete + Document soft delete.
+     * chat_message_sources.document_chunk_id FK 가 ON DELETE CASCADE 가 아니므로
+     * 청크 hard delete 전에 같은 트랜잭션에서 출처 행을 먼저 비워 FK 위반 500 을 막는다 (#45).
+     * 과거 채팅 이력의 출처 표시는 사라지지만 메시지 본문은 보존된다 (운영 정책 합의).
+     *
+     * 순서가 중요하다: softDelete() 의 dirty mark 가 cms 삭제의 flushAutomatically=true 에 의해
+     * 먼저 UPDATE 로 flush 된 뒤 DELETE 가 실행되도록 softDelete() 를 가장 먼저 호출한다.
+     * cms 삭제의 clearAutomatically=true 가 호출되면 document 가 detached 가 되므로
+     * 그 시점 이후엔 softDelete() 가 영속화되지 않는다.
+     */
     @Transactional
     public void hardDeleteChunksAndSoftDeleteDocument(Long documentId) {
         Document document = findActiveOrThrow(documentId);
-        chunkRepository.deleteByDocumentId(documentId);
         document.softDelete();
+        chatMessageSourceRepository.deleteByDocumentId(documentId);
+        chunkRepository.deleteByDocumentId(documentId);
     }
 
     private Document findActiveOrThrow(Long documentId) {

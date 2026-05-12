@@ -39,6 +39,9 @@ public class DocumentService {
 
     private static final int POPULAR_DAYS = 7;
     private static final int POPULAR_LIMIT = 10;
+    // 인증된 클라이언트가 pageSize=Integer.MAX_VALUE 등 비정상 값으로 전체 테이블을 읽거나
+    // 인기 정렬 native query(chat_message_sources JOIN)로 DB 부하를 폭증시키지 못하도록 차단 (#58).
+    private static final int MAX_PAGE_SIZE = 100;
 
     private static final Sort SORT_LATEST = Sort.by("updatedAt", "id").descending();
 
@@ -87,9 +90,16 @@ public class DocumentService {
             }
             pageTexts = pages;
         } catch (java.io.IOException | RuntimeException e) {
-            // PDFBox 손상 PDF/암호화/IO 등 추출 실패만 잡고, Error(OOM 등)는 그대로 전파한다.
+            // PDFBox 손상 PDF/암호화/IO 등 추출 실패 → status=FAILED 로 진행 (디스크 PDF 는 reprocess 용도로 유지).
             log.warn("PDF 텍스트 추출 실패: {}", e.getMessage());
             initialStatus = DocumentStatus.FAILED;
+        } catch (Error e) {
+            // OOM 등 JVM Error 는 DB 트랜잭션 시작 전 단계에서 발생하므로 디스크 PDF 가 orphan 으로 남는다.
+            // 보상 삭제 후 재전파 (#59). Spring 의 GlobalExceptionHandler 는 Exception 만 매핑하므로
+            // 여기서 직접 로깅하지 않으면 Error 발생 사실이 운영 로그에 남지 않는다.
+            log.error("PDF 추출 중 JVM Error 발생, 디스크 PDF 보상 삭제: storageKey={}", storageKey, e);
+            fileStorage.deleteIfExists(storageKey);
+            throw e;
         }
 
         String content = String.join("\n", pageTexts);
@@ -98,14 +108,17 @@ public class DocumentService {
         }
 
         // 1차 트랜잭션: 저장 + embed 요청 body 준비
-        // DB 저장이 실패하면 디스크에 이미 쓴 PDF가 고아로 남으므로 보상 삭제 후 재던진다
+        // DB 저장이 실패하면 디스크에 이미 쓴 PDF가 고아로 남으므로 보상 삭제 후 재던진다.
+        // OOM 등 Error 도 트랜잭션이 commit 되지 못한 채 escape 할 수 있어 같이 정리 (#59).
         DocumentPersistenceService.SavePayload payload;
         try {
             payload = persistenceService.saveDocumentAndBuildEmbedRequest(
                     title, content, pageTexts, request.getCategoryId(), source, originalFilename,
                     storageKey, file.getSize(), initialStatus
             );
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | Error e) {
+            // Error 는 GlobalExceptionHandler 가 안 잡아주니 운영 로그에 직접 남긴다.
+            log.error("문서 저장 트랜잭션 실패, 디스크 PDF 보상 삭제: storageKey={}", storageKey, e);
             fileStorage.deleteIfExists(storageKey);
             throw e;
         }
@@ -240,20 +253,24 @@ public class DocumentService {
             collectCategoryIds(categoryId, all, categoryIds);
         }
 
-        String normalizedKeyword = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
-        String escapedKeyword = normalizedKeyword == null ? null : escapeLike(normalizedKeyword);
+        // Hibernate 6 + PostgreSQL JDBC가 타입 힌트 없는 null String 파라미터를 bytea로 추론해
+        // LIKE 절이 깨지는 회귀를 피하기 위해, keyword는 항상 non-null(빈 문자열)로 전달하고
+        // hasKeyword 플래그로 LIKE 적용 여부를 결정한다 (#72).
+        String normalizedKeyword = (keyword == null) ? "" : keyword.trim();
+        boolean hasKeyword = !normalizedKeyword.isEmpty();
+        String escapedKeyword = hasKeyword ? escapeLike(normalizedKeyword) : "";
 
         if ("popular".equalsIgnoreCase(sort)) {
             LocalDateTime since = LocalDateTime.now().minusDays(POPULAR_DAYS);
             return PageResponse.from(
                     documentRepository.searchActiveByPopularity(since, hasCategoryFilter, categoryIds,
-                            escapedKeyword, PageRequest.of(page, pageSize)),
+                            hasKeyword, escapedKeyword, PageRequest.of(page, pageSize)),
                     DocumentSearchResponse::from
             );
         }
 
         return PageResponse.from(
-                documentRepository.searchActive(hasCategoryFilter, categoryIds, escapedKeyword,
+                documentRepository.searchActive(hasCategoryFilter, categoryIds, hasKeyword, escapedKeyword,
                         PageRequest.of(page, pageSize, SORT_LATEST)),
                 DocumentSearchResponse::from
         );
@@ -385,7 +402,7 @@ public class DocumentService {
     }
 
     private void validatePageParams(int page, int size) {
-        if (page < 0 || size < 1) {
+        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
     }

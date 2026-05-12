@@ -20,7 +20,7 @@ public record DocumentListResponse(
                 document.getCategory().getId(),
                 document.getCategory().getName(),
                 document.getStatus().getValue(),
-                document.getSource().name(),
+                document.getSource().getValue(),
                 document.getCreatedAt()
         );
     }
