@@ -15,9 +15,12 @@ public enum DocumentSource {
 
     private final String value;
 
+    // 입력(API 요청 body)은 lowercase value("sw", "kmu")로 받고
+    // DB 컬럼도 lowercase로 저장하므로, 응답 직렬화도 lowercase로 통일한다 (#60).
+    // 기존엔 name()이라 응답은 "SW"인데 같은 값을 그대로 요청에 넣으면 400으로 거절됐다.
     @JsonValue
     public String toJson() {
-        return name();
+        return value;
     }
 
     public static DocumentSource from(String value) {

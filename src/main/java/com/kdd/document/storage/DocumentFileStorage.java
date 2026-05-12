@@ -11,10 +11,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
 /**
@@ -42,16 +44,36 @@ public class DocumentFileStorage {
 
     /**
      * 파일을 저장하고 storageKey(루트 기준 상대 파일명)를 반환한다.
+     * 최종 경로에 직접 쓰지 않고 임시 파일에 먼저 쓴 뒤 ATOMIC_MOVE 로 이동한다 —
+     * JVM 크래시·디스크 풀 등으로 부분 쓰기가 발생해도 storageKey 와 매핑된 파일이
+     * 반쪽 상태로 남지 않도록 보장 (#59).
      */
     public String store(MultipartFile file) {
         String storageKey = UUID.randomUUID() + ".pdf";
         Path target = resolveSafe(storageKey);
+        Path tmp = null;
         try {
-            file.transferTo(target);
+            tmp = Files.createTempFile(rootDir, ".upload-", ".pdf.part");
+            try (InputStream in = file.getInputStream()) {
+                Files.copy(in, tmp, StandardCopyOption.REPLACE_EXISTING);
+            }
+            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE);
+            return storageKey;
         } catch (IOException e) {
+            // 디스크 풀 / 권한 / ATOMIC_MOVE 미지원 FS 등 원인 구분이 운영 디버깅에 필수.
+            // BusinessException 으로 변환되면서 cause 가 사라지므로 여기서 원본 스택 보존.
+            // 절대 경로 노출 방지를 위해 파일명만 로깅한다.
+            String tmpName = tmp == null ? null : tmp.getFileName().toString();
+            log.error("PDF 저장 실패: storageKey={}, tmpName={}", storageKey, tmpName, e);
+            if (tmp != null) {
+                try {
+                    Files.deleteIfExists(tmp);
+                } catch (IOException cleanup) {
+                    log.warn("업로드 임시 파일 정리 실패: tmpName={}", tmpName, cleanup);
+                }
+            }
             throw new BusinessException(ErrorCode.INTERNAL_ERROR);
         }
-        return storageKey;
     }
 
     /**

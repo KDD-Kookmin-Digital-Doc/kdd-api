@@ -34,16 +34,19 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     Page<Document> findByCategoryIds(@Param("categoryIds") List<Long> categoryIds, Pageable pageable);
 
     // 사용자 진입점 (검색 latest) — COMPLETED 문서만 노출
+    // keyword는 항상 non-null로 전달한다 (없을 땐 빈 문자열). Hibernate 6 + PostgreSQL JDBC가
+    // 타입 힌트 없는 null String 파라미터를 bytea로 추론해 LIKE 절이 깨지는 회귀를 피하기 위함 (#72).
     @EntityGraph(attributePaths = {"category"})
     @Query("""
             SELECT d FROM Document d
             WHERE d.deletedAt IS NULL
               AND d.status = com.kdd.document.entity.DocumentStatus.COMPLETED
               AND (:hasCategoryFilter = false OR d.category.id IN :categoryIds)
-              AND (:keyword IS NULL OR d.title LIKE CONCAT('%', :keyword, '%') ESCAPE '\\')
+              AND (:hasKeyword = false OR d.title LIKE CONCAT('%', :keyword, '%') ESCAPE '\\')
             """)
     Page<Document> searchActive(@Param("hasCategoryFilter") boolean hasCategoryFilter,
                                 @Param("categoryIds") List<Long> categoryIds,
+                                @Param("hasKeyword") boolean hasKeyword,
                                 @Param("keyword") String keyword,
                                 Pageable pageable);
 
@@ -70,6 +73,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     List<PopularDocumentProjection> findPopularDocuments(@Param("since") LocalDateTime since, Pageable pageable);
 
     // 사용자 진입점 (검색 popular) — COMPLETED 문서만 노출
+    // keyword null 시 native LIKE 절에서 bytea 추론 회귀를 피하기 위해 hasKeyword 가드 사용 (#72).
     @Query(value = """
             SELECT d.id, d.title, dc.name AS category_name,
                    d.created_at, d.updated_at,
@@ -86,7 +90,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
             WHERE d.deleted_at IS NULL
               AND d.status = 'completed'
               AND (:hasCategoryFilter = false OR d.category_id IN (:categoryIds))
-              AND (:keyword IS NULL OR d.title LIKE CONCAT('%%', :keyword, '%%') ESCAPE '\\')
+              AND (:hasKeyword = false OR d.title LIKE CONCAT('%%', :keyword, '%%') ESCAPE '\\')
             ORDER BY popularity_score DESC, d.updated_at DESC, d.id DESC
             """,
             countQuery = """
@@ -95,13 +99,14 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
             WHERE d.deleted_at IS NULL
               AND d.status = 'completed'
               AND (:hasCategoryFilter = false OR d.category_id IN (:categoryIds))
-              AND (:keyword IS NULL OR d.title LIKE CONCAT('%%', :keyword, '%%') ESCAPE '\\')
+              AND (:hasKeyword = false OR d.title LIKE CONCAT('%%', :keyword, '%%') ESCAPE '\\')
             """,
             nativeQuery = true)
     Page<SearchByPopularityProjection> searchActiveByPopularity(
             @Param("since") LocalDateTime since,
             @Param("hasCategoryFilter") boolean hasCategoryFilter,
             @Param("categoryIds") List<Long> categoryIds,
+            @Param("hasKeyword") boolean hasKeyword,
             @Param("keyword") String keyword,
             Pageable pageable);
 
