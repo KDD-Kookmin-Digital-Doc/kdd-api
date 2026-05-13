@@ -91,13 +91,20 @@ public class GlobalExceptionHandler {
     /**
      * @Validated 가 붙은 컨트롤러의 @RequestParam/@PathVariable 제약(@Min 등) 위반 시 발생.
      * 핸들러가 없으면 일반 Exception 핸들러로 떨어져 500이 응답된다 (예: page=-1).
+     * MethodArgumentNotValidException 핸들러와 동일하게 위반된 파라미터별 메시지를 합쳐서 응답.
      */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException e) {
-        log.warn("Constraint violation: {}", e.getMessage());
+        String message = e.getConstraintViolations().stream()
+                .map(v -> v.getPropertyPath() + ": " + v.getMessage())
+                .collect(Collectors.joining(", "));
+        if (message.isEmpty()) {
+            message = ErrorCode.INVALID_INPUT.getMessage();
+        }
+        log.warn("Constraint violation: {}", message);
         return ResponseEntity
                 .badRequest()
-                .body(new ErrorResponse(ErrorCode.INVALID_INPUT.getCode(), ErrorCode.INVALID_INPUT.getMessage()));
+                .body(new ErrorResponse(ErrorCode.INVALID_INPUT.getCode(), message));
     }
 
     /**

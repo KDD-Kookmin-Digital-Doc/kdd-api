@@ -38,11 +38,15 @@ public class AppSettingService {
     }
 
     /**
-     * 호출자(컨트롤러)가 {@code @Min(0)}로 음수를 사전 차단한다는 가정 하에 동작한다.
-     * 다른 진입점이 생기면 검증을 이 메서드 또는 공통 validator로 옮길 것.
+     * 컨트롤러의 {@code @Min(0)}이 1차로 음수를 차단하지만, 다른 진입점(테스트/스크립트/향후 신규 컨트롤러)에서
+     * 우회 호출될 가능성에 대비해 서비스 레이어에서도 방어한다. 음수를 그대로 저장하면 DB에는 잘못된 값이 남고
+     * 읽기 경로({@link #getDefaultChatLimit()})는 fallback으로 대체해 응답하므로 DB값과 런타임값이 어긋난다.
      */
     @Transactional
     public int updateDefaultChatLimit(int newLimit) {
+        if (newLimit < 0) {
+            throw new IllegalArgumentException("default_chat_limit must be >= 0");
+        }
         String value = String.valueOf(newLimit);
         appSettingRepository.findById(KEY_DEFAULT_CHAT_LIMIT)
                 .ifPresentOrElse(
