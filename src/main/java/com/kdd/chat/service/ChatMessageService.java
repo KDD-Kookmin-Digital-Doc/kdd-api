@@ -53,7 +53,12 @@ public class ChatMessageService {
         } catch (RuntimeException e) {
             // 세션 검증 실패(SESSION_NOT_FOUND/SESSION_FORBIDDEN) 등으로 메시지가 저장되지 못한 경우,
             // 위에서 차감된 사용량을 되돌려 사용자가 한도 1회를 부당하게 잃지 않도록 한다.
-            chatRateLimitService.decrement(userId);
+            // decrement 자체가 실패해도 원인 예외를 잃지 않도록 별도 try/catch로 감싼다.
+            try {
+                chatRateLimitService.decrement(userId);
+            } catch (RuntimeException rollbackEx) {
+                log.error("Failed to rollback chat usage decrement for userId={}", userId, rollbackEx);
+            }
             throw e;
         }
 

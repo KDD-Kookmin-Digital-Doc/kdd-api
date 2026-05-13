@@ -1,13 +1,13 @@
 package com.kdd.setting.service;
 
-import com.kdd.global.error.BusinessException;
-import com.kdd.global.error.ErrorCode;
 import com.kdd.setting.entity.AppSetting;
 import com.kdd.setting.repository.AppSettingRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AppSettingService {
@@ -19,18 +19,30 @@ public class AppSettingService {
 
     private final AppSettingRepository appSettingRepository;
 
+    /**
+     * 신규 가입자에게 적용되는 일일 채팅 한도. DB의 값이 비어 있거나, 숫자가 아니거나, 음수면
+     * {@link #FALLBACK_DEFAULT_CHAT_LIMIT}로 대체한다. 음수 방어가 없으면 신규 가입 시
+     * {@code users_daily_chat_limit_check} 제약에 걸려 가입 자체가 실패할 수 있다.
+     */
     @Transactional(readOnly = true)
     public int getDefaultChatLimit() {
-        return appSettingRepository.findById(KEY_DEFAULT_CHAT_LIMIT)
+        int value = appSettingRepository.findById(KEY_DEFAULT_CHAT_LIMIT)
                 .map(s -> parseIntOrFallback(s.getValue()))
                 .orElse(FALLBACK_DEFAULT_CHAT_LIMIT);
+        if (value < 0) {
+            log.warn("default_chat_limit stored as negative ({}), using fallback {}",
+                    value, FALLBACK_DEFAULT_CHAT_LIMIT);
+            return FALLBACK_DEFAULT_CHAT_LIMIT;
+        }
+        return value;
     }
 
+    /**
+     * 호출자(컨트롤러)가 {@code @Min(0)}로 음수를 사전 차단한다는 가정 하에 동작한다.
+     * 다른 진입점이 생기면 검증을 이 메서드 또는 공통 validator로 옮길 것.
+     */
     @Transactional
     public int updateDefaultChatLimit(int newLimit) {
-        if (newLimit < 0) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT);
-        }
         String value = String.valueOf(newLimit);
         appSettingRepository.findById(KEY_DEFAULT_CHAT_LIMIT)
                 .ifPresentOrElse(
@@ -48,6 +60,9 @@ public class AppSettingService {
         try {
             return Integer.parseInt(value);
         } catch (NumberFormatException e) {
+            // DB에 손상된 값이 들어간 케이스를 운영 모니터링에서 감지할 수 있도록 명시적으로 경고 로그
+            log.warn("Failed to parse default_chat_limit value '{}', using fallback {}",
+                    value, FALLBACK_DEFAULT_CHAT_LIMIT);
             return FALLBACK_DEFAULT_CHAT_LIMIT;
         }
     }

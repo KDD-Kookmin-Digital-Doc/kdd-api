@@ -11,14 +11,17 @@ import com.kdd.user.service.AdminUserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Admin - User", description = "관리자 사용자/채팅 한도 관리 API")
 @RestController
 @RequestMapping("/admin/users")
 @RequiredArgsConstructor
+@Validated
 public class AdminUserController {
 
     private final AdminUserService adminUserService;
@@ -31,8 +34,8 @@ public class AdminUserController {
             @RequestParam(required = false) String userType,
             @RequestParam(required = false) String role,
             @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) int size) {
         return ResponseEntity.ok(adminUserService.searchUsers(userType, role, search, page, size));
     }
 

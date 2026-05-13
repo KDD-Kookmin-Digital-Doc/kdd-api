@@ -7,7 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 public record BulkChatLimitUpdateRequest(
-        @NotEmpty List<Long> userIds,
+        @NotEmpty List<@NotNull Long> userIds,
         @NotNull @Min(0) Integer dailyChatLimit
 ) {
 }
