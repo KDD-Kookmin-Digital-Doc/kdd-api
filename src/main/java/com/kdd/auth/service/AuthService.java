@@ -7,6 +7,7 @@ import com.kdd.global.error.BusinessException;
 import com.kdd.global.error.ErrorCode;
 import com.kdd.global.security.JwtProvider;
 import com.kdd.global.security.SessionValidator;
+import com.kdd.setting.service.AppSettingService;
 import com.kdd.user.entity.Role;
 import com.kdd.user.entity.User;
 import com.kdd.user.repository.UserRepository;
@@ -35,6 +36,7 @@ public class AuthService {
     private final JwtProvider jwtProvider;
     private final RefreshTokenReuseDetector refreshTokenReuseDetector;
     private final SessionValidator sessionValidator;
+    private final AppSettingService appSettingService;
 
     @Value("${app.auth.allowed-domain}")
     private String allowedDomain;
@@ -124,10 +126,15 @@ public class AuthService {
     private User createUser(GoogleUserInfo userInfo) {
         Role role = isAdminEmail(userInfo.email()) ? Role.ADMIN : Role.USER;
 
+        // 신규 가입자의 일일 채팅 한도는 운영 중 admin이 즉시 조정 가능하도록 app_settings에 보관된 값을 사용한다.
+        // 코드 상수로 박으면 정책 변경 시마다 재배포가 필요해진다.
+        int defaultChatLimit = appSettingService.getDefaultChatLimit();
+
         User user = User.builder()
                 .email(userInfo.email())
                 .name(userInfo.name())
                 .role(role)
+                .dailyChatLimit(defaultChatLimit)
                 .build();
 
         return userRepository.save(user);

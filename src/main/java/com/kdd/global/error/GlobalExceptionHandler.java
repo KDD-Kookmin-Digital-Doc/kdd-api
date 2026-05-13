@@ -1,6 +1,8 @@
 package com.kdd.global.error;
 
+import com.kdd.chat.exception.RateLimitExceededException;
 import com.kdd.global.response.ErrorResponse;
+import com.kdd.global.response.RateLimitErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -23,6 +25,19 @@ public class GlobalExceptionHandler {
 
     @Value("${app.cors.secure-cookie}")
     private boolean secureCookie;
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<RateLimitErrorResponse> handleRateLimit(RateLimitExceededException e) {
+        log.info("Rate limit exceeded: remaining={}, resetsAt={}", e.getRemaining(), e.getResetsAt());
+        ErrorCode code = ErrorCode.RATE_LIMIT_EXCEEDED;
+        return ResponseEntity.status(code.getStatus())
+                .body(new RateLimitErrorResponse(
+                        code.getCode(),
+                        code.getMessage(),
+                        e.getRemaining(),
+                        e.getResetsAt()
+                ));
+    }
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
