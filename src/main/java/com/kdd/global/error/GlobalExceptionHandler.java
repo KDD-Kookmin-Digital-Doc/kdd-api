@@ -3,6 +3,7 @@ package com.kdd.global.error;
 import com.kdd.chat.exception.RateLimitExceededException;
 import com.kdd.global.response.ErrorResponse;
 import com.kdd.global.response.RateLimitErrorResponse;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -82,6 +83,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class})
     public ResponseEntity<ErrorResponse> handleBadRequest(Exception e) {
         log.warn("Bad request: {}", e.getMessage());
+        return ResponseEntity
+                .badRequest()
+                .body(new ErrorResponse(ErrorCode.INVALID_INPUT.getCode(), ErrorCode.INVALID_INPUT.getMessage()));
+    }
+
+    /**
+     * @Validated 가 붙은 컨트롤러의 @RequestParam/@PathVariable 제약(@Min 등) 위반 시 발생.
+     * 핸들러가 없으면 일반 Exception 핸들러로 떨어져 500이 응답된다 (예: page=-1).
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException e) {
+        log.warn("Constraint violation: {}", e.getMessage());
         return ResponseEntity
                 .badRequest()
                 .body(new ErrorResponse(ErrorCode.INVALID_INPUT.getCode(), ErrorCode.INVALID_INPUT.getMessage()));

@@ -14,9 +14,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "user_chat_usage",
         uniqueConstraints = @UniqueConstraint(name = "uk_user_chat_usage_user_date",
-                columnNames = {"user_id", "usage_date"}),
-        indexes = @Index(name = "idx_user_chat_usage_user_date",
-                columnList = "user_id, usage_date"))
+                columnNames = {"user_id", "usage_date"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UserChatUsage {
