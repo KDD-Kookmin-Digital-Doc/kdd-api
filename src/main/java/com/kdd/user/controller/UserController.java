@@ -1,5 +1,7 @@
 package com.kdd.user.controller;
 
+import com.kdd.chat.dto.ChatUsageResponse;
+import com.kdd.chat.service.ChatRateLimitService;
 import com.kdd.user.dto.CreateProfileRequest;
 import com.kdd.user.dto.UpdateProfileRequest;
 import com.kdd.user.dto.UserResponse;
@@ -17,12 +19,19 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
+    private final ChatRateLimitService chatRateLimitService;
 
     @GetMapping
     public ResponseEntity<UserResponse> getMe(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         UserResponse response = userService.getMe(userId);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/chat-usage")
+    public ResponseEntity<ChatUsageResponse> getMyChatUsage(Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ResponseEntity.ok(chatRateLimitService.getUsage(userId));
     }
 
     @PostMapping("/profile")

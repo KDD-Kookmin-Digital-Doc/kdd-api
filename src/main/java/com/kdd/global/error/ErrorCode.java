@@ -34,6 +34,7 @@ public enum ErrorCode {
     // Chat
     SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND", "존재하지 않는 채팅 세션입니다."),
     SESSION_FORBIDDEN(HttpStatus.FORBIDDEN, "SESSION_FORBIDDEN", "다른 사용자의 채팅 세션은 접근할 수 없습니다."),
+    RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED", "채팅 횟수 제한을 초과했습니다."),
 
     // FAQ
     FAQ_NOT_FOUND(HttpStatus.NOT_FOUND, "FAQ_NOT_FOUND", "존재하지 않는 FAQ입니다."),

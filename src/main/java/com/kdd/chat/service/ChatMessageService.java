@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ChatMessageService {
 
     private final ChatMessagePersister persister;
+    private final ChatRateLimitService chatRateLimitService;
     private final WebClient aiServerWebClient;
 
     // AI 답변 생성에 수십 초가 걸릴 수 있어 일반 HTTP 타임아웃보다 길게 설정
@@ -38,11 +39,23 @@ public class ChatMessageService {
     private static final Duration AI_STREAM_MAX_IDLE = Duration.ofMinutes(10);
 
     public SseEmitter sendMessage(Long sessionId, Long userId, String content) {
-        // SSE 시작 전에 모든 DB 작업을 한 트랜잭션으로 끝내 커넥션을 즉시 반환한다.
-        // open-in-view=false 환경에서 lazy 로딩이 트랜잭션 안에서 안전하게 일어나도록 하면서,
-        // 이후 수십 초의 SSE 스트리밍 동안 HikariCP 커넥션이 점유되지 않게 한다.
-        ChatMessagePersister.PreparedChat prepared =
-                persister.prepareAndSaveUserMessage(sessionId, userId, content);
+        // 한도 체크 + 카운트 +1을 가장 먼저 수행. 한도 초과면 RateLimitExceededException이 위로 전파되어
+        // 글로벌 핸들러가 429를 응답한다(SSE 응답이 아직 시작되지 않은 시점이므로 JSON 본문으로 나감).
+        // SSE 시작 후의 카운트 처리는 race window가 생기므로 진입부에서 짧은 REQUIRES_NEW 트랜잭션으로 끝낸다.
+        int remaining = chatRateLimitService.checkAndIncrement(userId);
+
+        ChatMessagePersister.PreparedChat prepared;
+        try {
+            // SSE 시작 전에 모든 DB 작업을 한 트랜잭션으로 끝내 커넥션을 즉시 반환한다.
+            // open-in-view=false 환경에서 lazy 로딩이 트랜잭션 안에서 안전하게 일어나도록 하면서,
+            // 이후 수십 초의 SSE 스트리밍 동안 HikariCP 커넥션이 점유되지 않게 한다.
+            prepared = persister.prepareAndSaveUserMessage(sessionId, userId, content);
+        } catch (RuntimeException e) {
+            // 세션 검증 실패(SESSION_NOT_FOUND/SESSION_FORBIDDEN) 등으로 메시지가 저장되지 못한 경우,
+            // 위에서 차감된 사용량을 되돌려 사용자가 한도 1회를 부당하게 잃지 않도록 한다.
+            chatRateLimitService.decrement(userId);
+            throw e;
+        }
 
         AiChatRequest request = new AiChatRequest(
                 content,
@@ -53,11 +66,11 @@ public class ChatMessageService {
         );
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
-        streamFromAiServer(emitter, sessionId, request);
+        streamFromAiServer(emitter, sessionId, request, remaining);
         return emitter;
     }
 
-    private void streamFromAiServer(SseEmitter emitter, Long sessionId, AiChatRequest request) {
+    private void streamFromAiServer(SseEmitter emitter, Long sessionId, AiChatRequest request, int remaining) {
         StringBuilder contentAccumulator = new StringBuilder();
         AtomicReference<ConfidenceLevel> confidenceRef = new AtomicReference<>();
         List<AiSourceRaw> capturedSources = new ArrayList<>();
@@ -80,7 +93,7 @@ public class ChatMessageService {
                 .subscribe(
                         node -> handleEvent(emitter, node, sessionId,
                                 contentAccumulator, confidenceRef, capturedSources,
-                                clientConnected, terminalReceived),
+                                clientConnected, terminalReceived, remaining),
                         error -> handleStreamError(emitter, error, clientConnected, terminalReceived),
                         () -> handleStreamComplete(emitter, sessionId, clientConnected, terminalReceived)
                 );
@@ -102,7 +115,8 @@ public class ChatMessageService {
                              AtomicReference<ConfidenceLevel> confidenceRef,
                              List<AiSourceRaw> capturedSources,
                              AtomicBoolean clientConnected,
-                             AtomicBoolean terminalReceived) {
+                             AtomicBoolean terminalReceived,
+                             int remaining) {
         try {
             String type = node.path("type").asText();
             switch (type) {
@@ -111,7 +125,7 @@ public class ChatMessageService {
                 case "text" -> handleText(emitter, node, contentAccumulator, clientConnected);
                 case "done" -> {
                     terminalReceived.set(true);
-                    handleDone(emitter, sessionId, contentAccumulator, confidenceRef, capturedSources, clientConnected);
+                    handleDone(emitter, sessionId, contentAccumulator, confidenceRef, capturedSources, clientConnected, remaining);
                 }
                 case "error" -> {
                     terminalReceived.set(true);
@@ -211,7 +225,8 @@ public class ChatMessageService {
                             StringBuilder contentAccumulator,
                             AtomicReference<ConfidenceLevel> confidenceRef,
                             List<AiSourceRaw> capturedSources,
-                            AtomicBoolean clientConnected) {
+                            AtomicBoolean clientConnected,
+                            int remaining) {
         // 클라 연결 여부와 무관하게 DB 저장은 항상 수행 — 사용자가 돌아와서 히스토리에서 답변을 볼 수 있어야 한다
         Long messageId = persister.saveAssistantMessage(
                 sessionId,
@@ -219,7 +234,7 @@ public class ChatMessageService {
                 confidenceRef.get(),
                 capturedSources
         );
-        trySend(emitter, DoneEvent.of(messageId), clientConnected);
+        trySend(emitter, DoneEvent.of(messageId, remaining), clientConnected);
         if (clientConnected.get()) {
             safeComplete(emitter);
         }
