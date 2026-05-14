@@ -91,7 +91,8 @@ public class FaqService {
         faqRepository.delete(faq);
     }
 
-    private Faq findFaqOrThrow(Long faqId) {
+    // 다른 도메인(예: FaqChatService)에서도 동일한 FAQ_NOT_FOUND 변환 패턴이 필요해 package-private로 노출.
+    Faq findFaqOrThrow(Long faqId) {
         return faqRepository.findById(faqId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAQ_NOT_FOUND));
     }
