@@ -211,7 +211,7 @@ public class ChatMessageService {
                 Long chunkId = parseNullableLong(src.path("chunk_id").asText(null));
                 String docName = src.path("doc_name").asText(null);
                 Integer page = src.has("page") && !src.get("page").isNull() ? src.get("page").asInt() : null;
-                sseSources.add(new SseSourceDto(docId, docName, page));
+                sseSources.add(new SseSourceDto(docId, docName, page, chunkId));
                 capturedSources.add(new AiSourceRaw(docId, chunkId, docName, page));
             }
         }

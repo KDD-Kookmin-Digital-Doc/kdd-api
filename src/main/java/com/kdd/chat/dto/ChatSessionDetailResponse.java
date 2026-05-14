@@ -49,13 +49,15 @@ public record ChatSessionDetailResponse(
     public record ChatMessageSourceResponse(
             Long documentId,
             String documentTitle,
-            Integer page
+            Integer page,
+            Long chunkId
     ) {
         public static ChatMessageSourceResponse from(ChatMessageSource source) {
             return new ChatMessageSourceResponse(
                     source.getDocument().getId(),
                     source.getDocument().getTitle(),
-                    source.getPage()
+                    source.getPage(),
+                    source.getDocumentChunk().getId()
             );
         }
     }
