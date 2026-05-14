@@ -3,6 +3,8 @@ package com.kdd.global.error;
 import com.kdd.global.response.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -95,6 +97,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .badRequest()
                 .body(new ErrorResponse(ErrorCode.INVALID_INPUT.getCode(), ErrorCode.INVALID_INPUT.getMessage()));
+    }
+
+    /**
+     * PESSIMISTIC_WRITE 락 충돌(예: FAQ 후보 동시 승인). PostgreSQL의 lock_timeout 초과 또는
+     * 다른 트랜잭션이 같은 row를 점유한 경우 → 409 LOCK_CONFLICT로 응답해 클라이언트가
+     * 재시도 가능한 충돌과 진짜 서버 버그(500)를 구분할 수 있게 한다.
+     */
+    @ExceptionHandler({PessimisticLockingFailureException.class, CannotAcquireLockException.class})
+    public ResponseEntity<ErrorResponse> handleLockConflict(Exception e) {
+        log.warn("Lock conflict during concurrent operation: {}", e.getMessage());
+        ErrorCode errorCode = ErrorCode.LOCK_CONFLICT;
+        return ResponseEntity
+                .status(errorCode.getStatus())
+                .body(new ErrorResponse(errorCode.getCode(), errorCode.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

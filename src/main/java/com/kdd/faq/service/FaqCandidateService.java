@@ -13,6 +13,7 @@ import com.kdd.global.error.BusinessException;
 import com.kdd.global.error.ErrorCode;
 import com.kdd.global.response.PageResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FaqCandidateService {
@@ -50,18 +52,23 @@ public class FaqCandidateService {
      * 흐름 (모두 같은 트랜잭션):<br>
      * 1) 관리자가 지정한 카테고리 검증 (FaqTopic enum)<br>
      * 2) PESSIMISTIC_WRITE로 후보 row 락 — 다수 관리자 동시 승인 race 차단<br>
-     * 3) AI 답변 초안(answer_draft)으로 FAQ row 생성 — Faq.answer가 NOT NULL이라 null이면 거절<br>
-     * 4) candidate.approve(topic, faqId, now) — 상태 전이 + faq_id 매핑<br>
+     * 3) 상태/답변 초안 가드 — 락 안에서 PENDING 아니거나 answer_draft 비어있으면 즉시 거절
+     *    (Faq INSERT 전에 가드해서 race 시 faqs id sequence가 무의미하게 advance하지 않도록)<br>
+     * 4) AI 답변 초안으로 FAQ row 생성<br>
+     * 5) candidate.approve(topic, faqId, now) — 상태 전이 + faq_id 매핑<br>
      * <p>
      * FAQ 저장 실패(예: DB 제약 위반) 시 트랜잭션 전체 롤백되어 candidate 상태도 PENDING 유지.
      */
     @Transactional
     public FaqResponse approve(Long candidateId, FaqCandidateApproveRequest request) {
-        FaqTopic chosenTopic = parseTopic(request.topic());
+        FaqTopic chosenTopic = FaqTopic.parseOrThrow(request.topic());
         FaqCandidate candidate = findCandidateForUpdateOrThrow(candidateId);
 
+        // Faq INSERT 전에 가드: race 시 sequence gap 방지 + 더 빠른 실패.
+        if (candidate.getStatus() != FaqCandidateStatus.PENDING) {
+            throw new BusinessException(ErrorCode.CANDIDATE_ALREADY_PROCESSED);
+        }
         // answer_draft가 ERD상 nullable이지만 Faq.answer는 NOT NULL이라, 답변 없는 후보는 승인 불가.
-        // 정상 흐름(AI가 draft 생성)에서는 발생하지 않으나 방어적으로 막는다.
         if (candidate.getAnswerDraft() == null || candidate.getAnswerDraft().isBlank()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
@@ -72,15 +79,9 @@ public class FaqCandidateService {
                 .topic(chosenTopic)
                 .build());
 
-        try {
-            candidate.approve(chosenTopic, faq.getId(), LocalDateTime.now());
-        } catch (IllegalStateException e) {
-            throw new BusinessException(ErrorCode.CANDIDATE_ALREADY_PROCESSED);
-        } catch (IllegalArgumentException e) {
-            // 도메인 가드 — parseTopic이 이미 막아서 도달 불가하지만 발화 시 500 대신 400으로 응답.
-            throw new BusinessException(ErrorCode.INVALID_INPUT);
-        }
+        candidate.approve(chosenTopic, faq.getId(), LocalDateTime.now());
 
+        log.info("[FAQ] candidate {} approved → faq {} (topic={})", candidate.getId(), faq.getId(), chosenTopic.getValue());
         return FaqResponse.from(faq);
     }
 
@@ -91,24 +92,16 @@ public class FaqCandidateService {
     @Transactional
     public void reject(Long candidateId) {
         FaqCandidate candidate = findCandidateForUpdateOrThrow(candidateId);
-        try {
-            candidate.reject();
-        } catch (IllegalStateException e) {
+        if (candidate.getStatus() != FaqCandidateStatus.PENDING) {
             throw new BusinessException(ErrorCode.CANDIDATE_ALREADY_PROCESSED);
         }
+        candidate.reject();
+        log.info("[FAQ] candidate {} rejected", candidate.getId());
     }
 
     private FaqCandidate findCandidateForUpdateOrThrow(Long candidateId) {
         return faqCandidateRepository.findByIdForUpdate(candidateId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CANDIDATE_NOT_FOUND));
-    }
-
-    private FaqTopic parseTopic(String value) {
-        try {
-            return FaqTopic.from(value);
-        } catch (IllegalArgumentException e) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT);
-        }
     }
 
     private void validatePageParams(int page, int pageSize) {

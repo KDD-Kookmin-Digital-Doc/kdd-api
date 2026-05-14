@@ -6,8 +6,6 @@ import com.kdd.faq.dto.FaqTopicResponse;
 import com.kdd.faq.entity.FaqTopic;
 import com.kdd.faq.service.FaqChatService;
 import com.kdd.faq.service.FaqService;
-import com.kdd.global.error.BusinessException;
-import com.kdd.global.error.ErrorCode;
 import com.kdd.global.response.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,21 +33,9 @@ public class FaqController {
             @RequestParam(required = false) String topic,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        // Spring 기본 enum 바인딩(FaqTopic.valueOf)은 FE 호환용 'etc' alias를 우회한다.
-        // FaqTopic.from()으로 변환해야 etc → OTHER 매핑이 작동한다.
-        FaqTopic parsedTopic = parseTopicOrNull(topic);
-        return ResponseEntity.ok(faqService.getFaqs(parsedTopic, page, pageSize));
-    }
-
-    private FaqTopic parseTopicOrNull(String topic) {
-        if (topic == null || topic.isBlank()) {
-            return null;
-        }
-        try {
-            return FaqTopic.from(topic);
-        } catch (IllegalArgumentException e) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT);
-        }
+        // Spring 기본 enum 바인딩(FaqTopic.valueOf)은 FE 호환용 'etc' alias를 우회하므로
+        // FaqTopic.parseOrNull로 변환해 etc → OTHER 매핑이 작동하도록 한다.
+        return ResponseEntity.ok(faqService.getFaqs(FaqTopic.parseOrNull(topic), page, pageSize));
     }
 
     @Operation(summary = "FAQ 토픽 조회", description = "사전에 정의된 FAQ 카테고리 목록(topic, label)을 조회한다.")

@@ -1,10 +1,14 @@
 package com.kdd.faq.entity;
 
 import com.fasterxml.jackson.annotation.JsonValue;
+import com.kdd.global.error.BusinessException;
+import com.kdd.global.error.ErrorCode;
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Getter
 @RequiredArgsConstructor
@@ -19,6 +23,9 @@ public enum FaqTopic {
     CAREER("career", "취업·현장실습"),
     EVENT("event", "행사·특강"),
     OTHER("other", "기타");
+
+    // enum은 @Slf4j 부착 불가하므로 static logger 직접 선언.
+    private static final Logger log = LoggerFactory.getLogger(FaqTopic.class);
 
     private final String value;
     private final String label;
@@ -40,6 +47,31 @@ public enum FaqTopic {
             }
         }
         throw new IllegalArgumentException("Unknown FaqTopic: " + value);
+    }
+
+    /**
+     * 외부 입력(FE 쿼리 파라미터, Request body)을 받아 FaqTopic으로 변환.
+     * 잘못된 값은 INVALID_INPUT(400)으로 변환되어 컨트롤러/서비스가 try/catch 보일러플레이트를 반복하지 않도록 한다.
+     * 잘못된 입력값 자체는 운영 디버깅을 위해 log.warn에 남긴다 (Sentry/log aggregator에서 추적 가능).
+     */
+    public static FaqTopic parseOrThrow(String value) {
+        try {
+            return from(value);
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid FaqTopic input: {}", value);
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+    }
+
+    /**
+     * 빈 값/공백은 null(필터 미지정)으로, 그 외는 parseOrThrow 동작.
+     * GET /faqs?topic=... 같은 optional 필터에 사용.
+     */
+    public static FaqTopic parseOrNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return parseOrThrow(value);
     }
 
     @Converter(autoApply = true)

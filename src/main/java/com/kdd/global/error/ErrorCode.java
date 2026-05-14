@@ -46,6 +46,7 @@ public enum ErrorCode {
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "입력값이 올바르지 않습니다."),
     CONFIRMATION_REQUIRED(HttpStatus.BAD_REQUEST, "CONFIRMATION_REQUIRED", "파괴적 작업 호출 시 confirm 파라미터가 필요하거나 값이 올바르지 않습니다."),
     PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE", "업로드 파일 크기 한도를 초과했습니다."),
+    LOCK_CONFLICT(HttpStatus.CONFLICT, "LOCK_CONFLICT", "다른 관리자가 동시에 작업 중입니다. 잠시 후 다시 시도해주세요."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다.");
 
     private final HttpStatus status;

@@ -8,6 +8,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
@@ -28,5 +29,5 @@ public interface FaqCandidateRepository extends JpaRepository<FaqCandidate, Long
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from FaqCandidate c where c.id = :id")
-    Optional<FaqCandidate> findByIdForUpdate(Long id);
+    Optional<FaqCandidate> findByIdForUpdate(@Param("id") Long id);
 }
