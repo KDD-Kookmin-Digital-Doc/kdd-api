@@ -10,6 +10,8 @@ spring:
       # PESSIMISTIC_WRITE 락 충돌 시 PostgreSQL이 무한 대기하지 않도록 모든 커넥션에 lock_timeout 5초 적용.
       # 초과 시 SQLState 55P03 → Spring DAO가 CannotAcquireLockException으로 변환 → handleLockConflict가 409 LOCK_CONFLICT 응답.
       # Hibernate의 @QueryHint(jakarta.persistence.lock.timeout)은 PostgreSQL dialect가 supportsWait()=false라 silent no-op이므로 세션 GUC로 강제.
+      # 주의: Flyway도 이 풀의 커넥션을 빌리므로 모든 마이그레이션에 5s 한도가 적용된다.
+      # 더 긴 한도가 필요한 DDL(예: 대용량 ALTER, FK 추가)은 해당 마이그레이션 SQL 첫 줄에서 `SET LOCAL lock_timeout = '<더 긴 값>'`로 명시 오버라이드.
       connection-init-sql: "SET lock_timeout = '5s'"
   jpa:
     open-in-view: false

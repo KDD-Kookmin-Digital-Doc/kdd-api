@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.regex.Pattern;
+
 @Getter
 @RequiredArgsConstructor
 public enum FaqTopic {
@@ -64,9 +66,9 @@ public enum FaqTopic {
         }
     }
 
-    // ASCII 제어문자(CR/LF/TAB/NUL/ANSI ESC 등) + Unicode line separator( ,  ) 모두 치환.
+    // ASCII 제어문자(CR/LF/TAB/NUL/ANSI ESC 등) + Unicode line separator(U+2028, U+2029) 모두 치환.
     // log aggregator·터미널이 이 문자들을 만나면 라인 분리/시각 위조 가능하므로 안전한 underscore로.
-    private static final java.util.regex.Pattern UNSAFE_LOG_CHARS = java.util.regex.Pattern.compile("[\\p{Cntrl}\\u2028\\u2029]");
+    private static final Pattern UNSAFE_LOG_CHARS = Pattern.compile("[\\p{Cntrl}\\u2028\\u2029]");
 
     private static String sanitizeForLog(String value) {
         if (value == null) return "null";
