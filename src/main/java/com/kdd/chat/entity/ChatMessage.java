@@ -38,7 +38,10 @@ public class ChatMessage {
     @Column(name = "confidence_level", length = 20)
     private ConfidenceLevel confidenceLevel;
 
+    // SSE 스트리밍 시점엔 AI가 보낸 순서대로 INSERT되지만, GET /chat/sessions/{id}/messages로
+    // 재조회할 때는 JPA가 fetch 순서를 보장하지 않는다. 저장 순서(= AI 송신 순서) 보존을 위해 id ASC로 명시.
     @OneToMany(mappedBy = "message", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("id ASC")
     @BatchSize(size = 50)
     private List<ChatMessageSource> sources = new ArrayList<>();
 
