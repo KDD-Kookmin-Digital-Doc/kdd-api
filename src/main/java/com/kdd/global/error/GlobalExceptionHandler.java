@@ -106,7 +106,8 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler({PessimisticLockingFailureException.class, CannotAcquireLockException.class})
     public ResponseEntity<ErrorResponse> handleLockConflict(Exception e) {
-        log.warn("Lock conflict during concurrent operation: {}", e.getMessage());
+        // 충돌 시 어떤 쿼리/트랜잭션이었는지 추적 가능하도록 throwable 자체를 전달해 stack trace를 남긴다.
+        log.warn("Lock conflict during concurrent operation", e);
         ErrorCode errorCode = ErrorCode.LOCK_CONFLICT;
         return ResponseEntity
                 .status(errorCode.getStatus())

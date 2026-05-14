@@ -58,9 +58,16 @@ public enum FaqTopic {
         try {
             return from(value);
         } catch (IllegalArgumentException e) {
-            log.warn("Invalid FaqTopic input: {}", value);
+            // 로그 인젝션·과대 페이로드 방지: 개행 제거 + 길이 제한 후 기록
+            log.warn("Invalid FaqTopic input: {}", sanitizeForLog(value));
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
+    }
+
+    private static String sanitizeForLog(String value) {
+        if (value == null) return "null";
+        String safe = value.replaceAll("[\\r\\n\\t]", "_");
+        return safe.length() > 64 ? safe.substring(0, 64) + "...(truncated)" : safe;
     }
 
     /**
