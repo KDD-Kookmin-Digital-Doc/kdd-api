@@ -3,67 +3,43 @@ package com.kdd.faq.dto;
 import com.kdd.chat.dto.ChatSessionDetailResponse.ChatMessageSourceResponse;
 import com.kdd.chat.entity.ChatMessage;
 import com.kdd.chat.entity.ChatSession;
-import com.kdd.chat.entity.MessageRole;
 
 import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
 
 /**
- * FAQ 기반 채팅 시작 응답. 노션 API 명세 "FAQ 기반 채팅 시작"을 그대로 따른다.
+ * FAQ 기반 채팅 시작 응답.
  * <p>
- * user 메시지는 messageId/role/content/createdAt만,
- * assistant 메시지는 RAG 응답과 동일하게 sources/confidence까지 포함한다.
- * FAQ 답변은 RAG 결과가 없으므로 sources는 빈 배열, confidence는 null.
- * sources 타입은 ChatSessionDetailResponse와 동일한 ChatMessageSourceResponse를 재사용해
- * FE가 두 응답을 동일한 메시지 렌더링 코드로 처리할 수 있도록 한다.
+ * 메시지 응답 형태(role/sources/confidence)는 채팅 세션 상세 조회 응답과 동일한 단일 record로
+ * 통일해 FE가 같은 메시지 렌더링 컴포넌트를 그대로 재사용할 수 있도록 한다.
+ * FAQ 답변은 RAG 결과가 없으므로 assistant 메시지의 sources는 빈 배열, confidence는 null.
+ * user 메시지도 동일 구조라 sources/confidence가 각각 빈 배열·null로 노출된다.
  */
 public record FaqChatStartResponse(
         Long sessionId,
         List<Message> messages
 ) {
-    public static FaqChatStartResponse of(ChatSession session, List<ChatMessage> messages) {
-        // 입력 순서가 뒤바뀌어도 응답은 항상 user → assistant 순서가 되도록 정렬한다.
-        List<Message> ordered = messages.stream()
-                .sorted(Comparator.comparing(m -> m.getRole() == MessageRole.USER ? 0 : 1))
-                .map(Message::from)
-                .toList();
-        return new FaqChatStartResponse(session.getId(), ordered);
-    }
-
     /**
-     * user/assistant 응답 필드가 달라 sealed로 분리.
-     * Jackson은 각 인스턴스 타입에 맞춰 직렬화하므로 user에 sources/confidence가 노출되지 않는다.
+     * 호출자가 user → assistant 순서로 List를 전달하면 응답 순서도 그대로 유지된다.
+     * 호출자 contract: messages 순서대로 FE에 노출되므로 service가 정확한 순서로 넘겨야 한다.
      */
-    public sealed interface Message permits UserMessage, AssistantMessage {
-        static Message from(ChatMessage m) {
-            return m.getRole() == MessageRole.USER
-                    ? UserMessage.from(m)
-                    : AssistantMessage.from(m);
-        }
+    public static FaqChatStartResponse of(ChatSession session, List<ChatMessage> messages) {
+        return new FaqChatStartResponse(
+                session.getId(),
+                messages.stream().map(Message::from).toList()
+        );
     }
 
-    public record UserMessage(
-            Long messageId,
-            String role,
-            String content,
-            LocalDateTime createdAt
-    ) implements Message {
-        public static UserMessage from(ChatMessage m) {
-            return new UserMessage(m.getId(), m.getRole().getValue(), m.getContent(), m.getCreatedAt());
-        }
-    }
-
-    public record AssistantMessage(
+    public record Message(
             Long messageId,
             String role,
             String content,
             List<ChatMessageSourceResponse> sources,
             String confidence,
             LocalDateTime createdAt
-    ) implements Message {
-        public static AssistantMessage from(ChatMessage m) {
-            return new AssistantMessage(
+    ) {
+        public static Message from(ChatMessage m) {
+            return new Message(
                     m.getId(),
                     m.getRole().getValue(),
                     m.getContent(),

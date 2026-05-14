@@ -5,6 +5,7 @@ import com.kdd.faq.dto.FaqCandidateResponse;
 import com.kdd.faq.dto.FaqResponse;
 import com.kdd.faq.entity.Faq;
 import com.kdd.faq.entity.FaqCandidate;
+import com.kdd.faq.entity.FaqCandidateStatus;
 import com.kdd.faq.entity.FaqTopic;
 import com.kdd.faq.repository.FaqCandidateRepository;
 import com.kdd.faq.repository.FaqRepository;
@@ -33,8 +34,12 @@ public class FaqCandidateService {
     @Transactional(readOnly = true)
     public PageResponse<FaqCandidateResponse> getCandidates(int page, int pageSize) {
         validatePageParams(page, pageSize);
+        // 응답 DTO에 status 필드가 없어 FE가 후보 상태를 구분 불가하므로 PENDING만 반환한다.
+        // APPROVED/REJECTED 후보는 audit 용도로 DB에 보존되며, ERD 인덱스 (status, ...)를 활용한다.
         return PageResponse.from(
-                faqCandidateRepository.findAll(PageRequest.of(page, pageSize, SORT_LATEST)),
+                faqCandidateRepository.findByStatus(
+                        FaqCandidateStatus.PENDING,
+                        PageRequest.of(page, pageSize, SORT_LATEST)),
                 FaqCandidateResponse::from
         );
     }

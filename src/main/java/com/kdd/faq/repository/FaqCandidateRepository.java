@@ -1,15 +1,23 @@
 package com.kdd.faq.repository;
 
 import com.kdd.faq.entity.FaqCandidate;
+import com.kdd.faq.entity.FaqCandidateStatus;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
 import java.util.Optional;
 
-// 페이지네이션 조회는 JpaRepository가 제공하는 findAll(Pageable) 그대로 사용한다.
 public interface FaqCandidateRepository extends JpaRepository<FaqCandidate, Long> {
+
+    /**
+     * 관리자 후보 목록 조회용. status 필터 기반으로 ERD 인덱스(status, ...)를 활용한다.
+     * REJECTED 후보도 row는 보존되지만 일반 목록(PENDING)에 노출되지 않도록 service가 PENDING으로 호출한다.
+     */
+    Page<FaqCandidate> findByStatus(FaqCandidateStatus status, Pageable pageable);
 
     /**
      * 승인/반려용 row-level write lock 조회.
