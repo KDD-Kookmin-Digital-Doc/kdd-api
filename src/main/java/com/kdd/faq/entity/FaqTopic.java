@@ -73,7 +73,8 @@ public enum FaqTopic {
     private static String sanitizeForLog(String value) {
         if (value == null) return "null";
         String safe = UNSAFE_LOG_CHARS.matcher(value).replaceAll("_");
-        return safe.length() > 64 ? safe.substring(0, 64) + "...(truncated)" : safe;
+        // 접미사 길이까지 포함해 정확히 64자로 자른다 (61 + "..." = 64).
+        return safe.length() > 64 ? safe.substring(0, 61) + "..." : safe;
     }
 
     /**
