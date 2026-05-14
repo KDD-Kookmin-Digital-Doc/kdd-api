@@ -37,6 +37,8 @@ public enum ErrorCode {
 
     // FAQ
     FAQ_NOT_FOUND(HttpStatus.NOT_FOUND, "FAQ_NOT_FOUND", "존재하지 않는 FAQ입니다."),
+    CANDIDATE_NOT_FOUND(HttpStatus.NOT_FOUND, "CANDIDATE_NOT_FOUND", "존재하지 않는 FAQ 후보입니다."),
+    CANDIDATE_ALREADY_PROCESSED(HttpStatus.CONFLICT, "CANDIDATE_ALREADY_PROCESSED", "이미 처리된 FAQ 후보입니다."),
 
     // Common
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "인증이 필요합니다."),
