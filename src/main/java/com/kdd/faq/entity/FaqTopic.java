@@ -64,9 +64,13 @@ public enum FaqTopic {
         }
     }
 
+    // ASCII 제어문자(CR/LF/TAB/NUL/ANSI ESC 등) + Unicode line separator( ,  ) 모두 치환.
+    // log aggregator·터미널이 이 문자들을 만나면 라인 분리/시각 위조 가능하므로 안전한 underscore로.
+    private static final java.util.regex.Pattern UNSAFE_LOG_CHARS = java.util.regex.Pattern.compile("[\\p{Cntrl}\\u2028\\u2029]");
+
     private static String sanitizeForLog(String value) {
         if (value == null) return "null";
-        String safe = value.replaceAll("[\\r\\n\\t]", "_");
+        String safe = UNSAFE_LOG_CHARS.matcher(value).replaceAll("_");
         return safe.length() > 64 ? safe.substring(0, 64) + "...(truncated)" : safe;
     }
 
