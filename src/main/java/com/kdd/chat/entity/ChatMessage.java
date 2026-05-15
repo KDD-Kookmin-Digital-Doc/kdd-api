@@ -38,6 +38,11 @@ public class ChatMessage {
     @Column(name = "confidence_level", length = 20)
     private ConfidenceLevel confidenceLevel;
 
+    // done 이벤트 없이 AI 스트림이 끊긴 경우의 부분 답변. FE는 이 값으로 다르게 렌더링하고,
+    // 운영/통계는 단순 BOOLEAN 필터로 분리 가능. 본문 안에 마커 문자열을 박지 않기 위함.
+    @Column(nullable = false)
+    private boolean partial;
+
     // SSE 스트리밍 시점엔 AI가 보낸 순서대로 INSERT되지만, GET /chat/sessions/{id}/messages로
     // 재조회할 때는 JPA가 fetch 순서를 보장하지 않는다. 저장 순서(= AI 송신 순서) 보존을 위해 id ASC로 명시.
     @OneToMany(mappedBy = "message", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -50,10 +55,12 @@ public class ChatMessage {
     private LocalDateTime createdAt;
 
     @Builder
-    public ChatMessage(ChatSession session, MessageRole role, String content, ConfidenceLevel confidenceLevel) {
+    public ChatMessage(ChatSession session, MessageRole role, String content,
+                       ConfidenceLevel confidenceLevel, boolean partial) {
         this.session = session;
         this.role = role;
         this.content = content;
         this.confidenceLevel = confidenceLevel;
+        this.partial = partial;
     }
 }

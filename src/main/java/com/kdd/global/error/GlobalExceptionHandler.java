@@ -42,6 +42,12 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    // 동일 세션 진행 중 AI 스트림이 끝날 때까지 클라가 polling/backoff 할 수 있도록 힌트.
+    // 정상적인 AI 응답은 수 초~수십 초 단위로 끝나므로 typical case에 맞춘 짧은 값을 권한다 — worst case(AI 서버 멈춤)
+    // 까지 기다리게 하면 FE가 과도하게 백오프해 UX가 나빠진다. doFinally가 실제 종료 즉시 가드를 풀어주므로
+    // 클라가 너무 일찍 폴링해도 실제 락은 그 사이에 풀려 있을 확률이 높다.
+    private static final String CHAT_SESSION_BUSY_RETRY_AFTER_SECONDS = "10";
+
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
         ErrorCode errorCode = e.getErrorCode();
@@ -58,6 +64,8 @@ public class GlobalExceptionHandler {
                     .maxAge(0)
                     .build();
             builder.header(HttpHeaders.SET_COOKIE, expiredCookie.toString());
+        } else if (errorCode == ErrorCode.CHAT_SESSION_BUSY) {
+            builder.header(HttpHeaders.RETRY_AFTER, CHAT_SESSION_BUSY_RETRY_AFTER_SECONDS);
         }
 
         return builder.body(new ErrorResponse(errorCode.getCode(), errorCode.getMessage()));

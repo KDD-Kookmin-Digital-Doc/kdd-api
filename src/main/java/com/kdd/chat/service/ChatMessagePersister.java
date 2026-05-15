@@ -5,6 +5,7 @@ import com.kdd.chat.entity.ChatMessage;
 import com.kdd.chat.entity.ChatMessageSource;
 import com.kdd.chat.entity.ChatSession;
 import com.kdd.chat.entity.ConfidenceLevel;
+import com.kdd.chat.entity.MessageCompleteness;
 import com.kdd.chat.entity.MessageRole;
 import com.kdd.chat.repository.ChatMessageRepository;
 import com.kdd.chat.repository.ChatMessageSourceRepository;
@@ -68,6 +69,7 @@ public class ChatMessagePersister {
                 .session(session)
                 .role(MessageRole.USER)
                 .content(content)
+                .partial(false)
                 .build());
 
         return new PreparedChat(userContext, history, isFirstMessage);
@@ -82,13 +84,15 @@ public class ChatMessagePersister {
 
     @Transactional
     public Long saveAssistantMessage(Long sessionId, String content,
-                                     ConfidenceLevel confidence, List<AiSourceRaw> sources) {
+                                     ConfidenceLevel confidence, List<AiSourceRaw> sources,
+                                     MessageCompleteness completeness) {
         ChatSession session = chatSessionRepository.getReferenceById(sessionId);
         ChatMessage message = chatMessageRepository.save(ChatMessage.builder()
                 .session(session)
                 .role(MessageRole.ASSISTANT)
                 .content(content)
                 .confidenceLevel(confidence)
+                .partial(completeness == MessageCompleteness.PARTIAL)
                 .build());
 
         if (sources != null) {
