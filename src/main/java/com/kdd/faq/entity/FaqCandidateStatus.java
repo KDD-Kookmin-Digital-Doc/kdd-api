@@ -1,6 +1,8 @@
 package com.kdd.faq.entity;
 
 import com.fasterxml.jackson.annotation.JsonValue;
+import com.kdd.global.error.BusinessException;
+import com.kdd.global.error.ErrorCode;
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 import lombok.Getter;
@@ -36,6 +38,21 @@ public enum FaqCandidateStatus {
             }
         }
         throw new IllegalArgumentException("Unknown FaqCandidateStatus: " + value);
+    }
+
+    /**
+     * 관리자 후보 목록의 optional status 필터용. 빈/공백은 null(전체 상태)로,
+     * 그 외 알 수 없는 값은 INVALID_INPUT(400)으로 컨버트해 컨트롤러 보일러플레이트를 줄인다.
+     */
+    public static FaqCandidateStatus parseOrNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return from(value);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
     }
 
     @Converter(autoApply = true)

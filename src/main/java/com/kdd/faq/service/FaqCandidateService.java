@@ -34,14 +34,15 @@ public class FaqCandidateService {
     private static final Sort SORT_LATEST = Sort.by("createdAt", "id").descending();
 
     @Transactional(readOnly = true)
-    public PageResponse<FaqCandidateResponse> getCandidates(int page, int pageSize) {
+    public PageResponse<FaqCandidateResponse> getCandidates(FaqCandidateStatus status, int page, int pageSize) {
         validatePageParams(page, pageSize);
-        // 응답 DTO에 status 필드가 없어 FE가 후보 상태를 구분 불가하므로 PENDING만 반환한다.
-        // APPROVED/REJECTED 후보는 audit 용도로 DB에 보존되며, ERD 인덱스 (status, ...)를 활용한다.
+        // 요구사항 4-(3)-1: "관리자가 반려해도 상태만 REJECTED로 변하고 목록에서 제거되지 않는다" — 기본은 전체 상태 반환.
+        // status 파라미터가 지정되면 해당 상태로 필터하며 ERD 인덱스 (status, ...)를 활용한다.
+        PageRequest pageRequest = PageRequest.of(page, pageSize, SORT_LATEST);
         return PageResponse.from(
-                faqCandidateRepository.findByStatus(
-                        FaqCandidateStatus.PENDING,
-                        PageRequest.of(page, pageSize, SORT_LATEST)),
+                status == null
+                        ? faqCandidateRepository.findAll(pageRequest)
+                        : faqCandidateRepository.findByStatus(status, pageRequest),
                 FaqCandidateResponse::from
         );
     }

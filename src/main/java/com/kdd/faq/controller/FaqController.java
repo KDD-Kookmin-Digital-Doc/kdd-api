@@ -33,8 +33,8 @@ public class FaqController {
             @RequestParam(required = false) String topic,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        // Spring 기본 enum 바인딩(FaqTopic.valueOf)은 FE 호환용 'etc' alias를 우회하므로
-        // FaqTopic.parseOrNull로 변환해 etc → OTHER 매핑이 작동하도록 한다.
+        // Spring 기본 enum 바인딩(FaqTopic.valueOf)은 lower-case value를 못 받으므로
+        // FaqTopic.parseOrNull로 직접 변환한다. 빈/공백 입력은 필터 미적용(null).
         return ResponseEntity.ok(faqService.getFaqs(FaqTopic.parseOrNull(topic), page, pageSize));
     }
 

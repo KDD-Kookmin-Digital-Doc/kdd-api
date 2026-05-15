@@ -38,11 +38,6 @@ public enum FaqTopic {
     }
 
     public static FaqTopic from(String value) {
-        // FE는 "기타"를 'etc'로 보내는데 BE/DB 정식 값은 'other'다.
-        // 양쪽 모두 받아주고 응답·DB에는 'other'로만 노출 (단일 source of truth).
-        if ("etc".equals(value)) {
-            return OTHER;
-        }
         for (FaqTopic topic : values()) {
             if (topic.value.equals(value)) {
                 return topic;
