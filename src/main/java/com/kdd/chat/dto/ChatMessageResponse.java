@@ -15,6 +15,7 @@ public record ChatMessageResponse(
         String content,
         List<ChatMessageSourceResponse> sources,
         String confidence,
+        boolean partial,
         LocalDateTime createdAt
 ) {
     public static ChatMessageResponse from(ChatMessage message) {
@@ -26,6 +27,7 @@ public record ChatMessageResponse(
                         .map(ChatMessageSourceResponse::from)
                         .toList(),
                 message.getConfidenceLevel() != null ? message.getConfidenceLevel().getValue() : null,
+                message.isPartial(),
                 message.getCreatedAt()
         );
     }
