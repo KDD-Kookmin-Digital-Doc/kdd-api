@@ -33,6 +33,14 @@ app:
   auth:
     allowed-domain: ${ALLOWED_DOMAIN:kookmin.ac.kr}
     admin-emails: ${DOC_ADMIN_EMAILS:}
+    # revoke 직후 이 시간(ms) 이내에 동일 refresh token이 다시 들어오면 도난이 아닌
+    # 동시 refresh race로 보고 reuse 판정에서 제외한다 (#76).
+    refresh-reuse-grace-period: 10000
+    session-cleanup:
+      # 만료된 세션을 즉시 지우지 않고 이 기간(일)만큼 보존한 뒤 삭제한다.
+      expired-retention-days: 7
+      # 일일 정리 잡 실행 시각 (Asia/Seoul).
+      cron: "0 0 4 * * *"
 
 ai:
   server:
