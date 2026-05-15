@@ -11,8 +11,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
-// 추가 인덱스: idx_auth_session_revoked_at — V6 마이그레이션의 부분 인덱스
-// (revoked_at IS NOT NULL only). JPA @Index는 WHERE 절을 지원하지 않아 여기서는 선언하지 않는다.
 @Entity
 @Table(name = "auth_sessions", indexes = {
         @Index(name = "idx_auth_session_user_id", columnList = "user_id"),
