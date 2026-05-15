@@ -31,9 +31,16 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, Long> 
     List<AuthSession> findAllActiveByUserId(@Param("userId") Long userId);
 
     /**
-     * revoke된 세션, 또는 만료된 지 보존 기간이 지난 세션을 한 배치만큼 삭제한다 (#69).
-     * 한 번에 모두 지우면 누적된 첫 운영 실행에서 lock/WAL 부담이 커질 수 있으므로,
-     * 호출 측이 작은 배치로 반복 호출해 각 배치를 짧은 별도 트랜잭션으로 commit한다.
+     * 자연 만료 시각이 보존 기간을 지난 세션을 한 배치만큼 삭제한다 (#69).
+     *
+     * <p><b>revoke 여부를 술어에 두지 않는 이유</b>: revoked_at만 보고 즉시 지우면
+     * {@link com.kdd.auth.service.RefreshTokenReuseDetector}가 사용하는 hash 매핑이 사라져
+     * 도난 토큰 재사용 시 전체 세션 revoke를 못 한다. 원래 refresh token의 자연 만료
+     * (expires_at) 이전까지는 reuse detection 가치가 살아있으므로 revoked 행도 그 시각이
+     * 지날 때까지 보존하고, 보존 기간(expiredCutoff) 이후에 일괄 삭제한다.
+     *
+     * <p><b>배치 처리</b>: 한 번에 모두 지우면 누적된 첫 운영 실행에서 lock/WAL 부담이
+     * 커지므로 호출 측이 작은 배치로 반복 호출해 각 배치를 짧은 별도 트랜잭션으로 commit한다.
      * 매 호출은 자체 트랜잭션으로 동작해야 하므로 메서드에 @Transactional을 둔다.
      *
      * @param expiredCutoff 이 시각 이전에 만료된 세션을 삭제 대상으로 본다
@@ -46,11 +53,11 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, Long> 
             DELETE FROM auth_sessions
             WHERE id IN (
                 SELECT id FROM auth_sessions
-                WHERE revoked_at IS NOT NULL OR expires_at < :expiredCutoff
+                WHERE expires_at < :expiredCutoff
                 LIMIT :batchSize
             )
             """, nativeQuery = true)
-    int deleteRevokedOrExpiredBatch(
+    int deleteExpiredBatch(
             @Param("expiredCutoff") LocalDateTime expiredCutoff,
             @Param("batchSize") int batchSize);
 }

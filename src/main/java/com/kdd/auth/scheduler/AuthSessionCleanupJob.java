@@ -11,10 +11,17 @@ import java.time.LocalDateTime;
 
 /**
  * 모든 로그인/refresh가 auth_sessions에 행을 INSERT만 하고 정리하지 않아 테이블이 무한 증가한다.
- * 일일 스케줄로 revoke된 세션과 만료 후 보존 기간이 지난 세션을 삭제한다 (#69).
+ * 일일 스케줄로 자연 만료 시각이 보존 기간을 지난 세션을 삭제한다 (#69).
  *
- * 누적 잔존 행이 많은 첫 실행에서 한 번에 통째로 DELETE하면 lock 보유 시간과 WAL 부하가 커지므로,
- * 작은 배치를 별도 트랜잭션으로 반복 commit한다. 한 번의 실행에서 잡지 못한 잔여분은 다음 날 잡힌다.
+ * <p><b>revoke 여부를 cleanup 기준에 두지 않는 이유</b>:
+ * revoked_at만 보고 즉시 지우면 {@link com.kdd.auth.service.RefreshTokenReuseDetector}가
+ * 사용하는 refresh_token_hash 매핑이 사라져 도난 토큰 재사용을 탐지하지 못한다.
+ * 원래 토큰의 자연 만료(expires_at) 이전까지는 reuse detection 가치가 살아있으므로
+ * revoked 행도 expires_at + retention이 지나야 삭제 대상이 된다.
+ *
+ * <p>누적 잔존 행이 많은 첫 실행에서 한 번에 통째로 DELETE하면 lock 보유 시간과 WAL 부하가
+ * 커지므로, 작은 배치를 별도 트랜잭션으로 반복 commit한다. 한 번의 실행에서 잡지 못한
+ * 잔여분은 다음 날 잡힌다.
  *
  * <p><b>배포 가정 — 단일 인스턴스</b>:
  * 현재 운영 배포는 단일 컨테이너(AWS Lightsail) 기준이라 {@link Scheduled}의 cluster-unaware
@@ -46,7 +53,7 @@ public class AuthSessionCleanupJob {
         int totalDeleted = 0;
         int batches = 0;
         while (batches < MAX_BATCHES_PER_RUN) {
-            int deleted = authSessionRepository.deleteRevokedOrExpiredBatch(expiredCutoff, BATCH_SIZE);
+            int deleted = authSessionRepository.deleteExpiredBatch(expiredCutoff, BATCH_SIZE);
             totalDeleted += deleted;
             batches++;
             if (deleted < BATCH_SIZE) {
