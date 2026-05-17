@@ -19,13 +19,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     // admin 사용자 목록 — userType/role 필터와 name/email 부분검색을 옵셔널로 받는다.
     // 빈 문자열은 컨트롤러에서 null로 치환되어 들어온다 (필터 미적용).
+    // CAST(:search AS string): Hibernate 6이 null 파라미터 타입을 bytea로 추론해
+    // PostgreSQL이 LOWER(bytea) 함수를 못 찾는 #82 회피.
     @Query("""
             SELECT u FROM User u
             WHERE (:userType IS NULL OR u.userType = :userType)
               AND (:role IS NULL OR u.role = :role)
               AND (:search IS NULL
-                   OR LOWER(u.name) LIKE LOWER(CONCAT('%', :search, '%'))
-                   OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')))
+                   OR LOWER(u.name) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+                   OR LOWER(u.email) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))
             """)
     Page<User> searchForAdmin(@Param("userType") UserType userType,
                               @Param("role") Role role,
