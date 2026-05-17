@@ -27,7 +27,8 @@ public class FaqController {
     private final FaqService faqService;
     private final FaqChatService faqChatService;
 
-    @Operation(summary = "FAQ 목록 조회", description = "카테고리(topic) 필터를 지원하며 생성일 최신순으로 페이지네이션된 FAQ 목록을 반환한다.")
+    @Operation(summary = "FAQ 목록 조회",
+            description = "카테고리(topic) 필터를 지원하며 생성일 최신순으로 페이지네이션된 FAQ 목록을 반환한다. page는 0부터 시작.")
     @GetMapping
     public ResponseEntity<PageResponse<FaqResponse>> getFaqs(
             @RequestParam(required = false) String topic,

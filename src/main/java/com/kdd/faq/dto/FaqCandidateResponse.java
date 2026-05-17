@@ -8,11 +8,12 @@ import java.time.LocalDateTime;
 
 /**
  * FAQ 후보 목록·상세 응답.
- * [BE] ERD FAQCandidate 컬럼 그대로 노출. 응답 필드명은 ERD 컬럼명을 카멜케이스로(answerDraft). topic은 nullable.
+ * [BE] ERD FAQCandidate 컬럼 + V7 마이그레이션으로 추가된 frequency를 그대로 노출.
  * <p>
- * status는 요구사항 4-(3)-1 "관리자는 FAQ 후보를 반려할 수 있어야 한다 — 하지만 상태만 REJECTED로 변하고
- * 목록에서 제거되지는 않는다"에 따라 항상 응답에 포함된다. FE는 이 값으로 PENDING/APPROVED/REJECTED를
- * 구분해 검토 화면에서 처리한다.
+ * 응답 필드명은 ERD 컬럼명을 카멜케이스로(answerDraft). topic/answerDraft는 nullable.
+ * status는 요구사항 4-(3)-1 "반려해도 row는 보존, 목록에서 제거되지 않는다"에 따라 항상 노출 —
+ * FE가 PENDING/APPROVED/REJECTED를 구분해 UI에서 처리할 수 있도록 한다.
+ * frequency는 관리자 검토 화면에서 승인 우선순위(클러스터 빈도) 판단에 사용된다.
  */
 public record FaqCandidateResponse(
         Long candidateId,
@@ -20,6 +21,7 @@ public record FaqCandidateResponse(
         String answerDraft,
         String topic,
         String status,
+        int frequency,
         LocalDateTime createdAt
 ) {
     public static FaqCandidateResponse from(FaqCandidate candidate) {
@@ -31,6 +33,7 @@ public record FaqCandidateResponse(
                 candidate.getAnswerDraft(),
                 category == null ? null : category.getValue(),
                 status == null ? null : status.getValue(),
+                candidate.getFrequency(),
                 candidate.getCreatedAt()
         );
     }
