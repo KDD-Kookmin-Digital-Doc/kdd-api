@@ -174,8 +174,8 @@ public class ChatMessageService {
     }
 
     /**
-     * done 이벤트 없이 AI 스트림이 끊긴 경우(통신 실패/비정상 종료/이벤트 처리 예외)에도, 누적된
-     * 부분 답변이 있으면 {@code partial=true}로 저장한다. 사용자가 브라우저에서 본 텍스트가 세션 재조회 시
+     * AI 스트림이 정상 완료(done)되지 못한 모든 경로 — 통신 실패/비정상 종료/이벤트 처리 예외/AI error 이벤트 —
+     * 에서 누적된 부분 답변을 {@code partial=true}로 저장한다. 사용자가 브라우저에서 본 텍스트가 세션 재조회 시
      * 사라져 화면-히스토리 불일치가 생기는 것을 막는다. FE는 {@code partial} 플래그로 다르게 렌더링할 수 있다.
      */
     private void savePartialAssistantIfAny(StreamCtx ctx) {
@@ -254,7 +254,10 @@ public class ChatMessageService {
                 }
                 case "error" -> {
                     ctx.terminalReceived().set(true);
-                    // AI가 명시적 error 이벤트를 보낸 케이스 — 답변 생성을 시도했으나 실패. 사용자는 답을 못 받음 → 차감 보상.
+                    // AI 명세서 시나리오 E(meta → text → ... → error)에서 사용자가 본 부분 답변을 partial=true로 보존.
+                    // 저장하지 않으면 새로고침 시 화면에 표시됐던 텍스트가 사라져 PR #55가 막으려던 화면-히스토리 불일치 재현.
+                    savePartialAssistantIfAny(ctx);
+                    // 답변 생성이 완료되지 못했으므로 차감된 한도는 보상.
                     safelyDecrement(ctx.userId(), ctx.rateLimit().usageDate());
                     handleAiError(ctx, node);
                 }
