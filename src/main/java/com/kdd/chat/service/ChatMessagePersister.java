@@ -43,7 +43,9 @@ public class ChatMessagePersister {
      * 409 CHAT_SESSION_BUSY를 받는 grief 시나리오를 차단한다.
      * <p>
      * 전체 엔티티 fetch 대신 user_id projection 쿼리만 돌려 cheap하게 검증.
-     * {@link #prepareAndSaveUserMessage}에 동일한 체크가 남아 있는 것은 defense-in-depth로 유지.
+     * {@link #prepareAndSaveUserMessage}에 동일한 체크가 남아 있는 것은 defense-in-depth — 이 메서드와
+     * prepareAndSaveUserMessage 사이에 세션이 삭제되는 TOCTOU 갭에서도 후자가 SESSION_NOT_FOUND를 던지고
+     * sendMessage의 catch가 rate-limit을 보상하므로 안전하게 처리된다.
      */
     @Transactional(readOnly = true)
     public void verifySessionOwnership(Long sessionId, Long userId) {
