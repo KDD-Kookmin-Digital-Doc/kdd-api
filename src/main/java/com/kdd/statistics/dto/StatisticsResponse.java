@@ -59,7 +59,9 @@ public record StatisticsResponse(
      * @param totalQuestions 누적 사용자 질문 수 (chat_messages WHERE role='user')
      * @param totalDocuments 활성 문서 수 (deleted_at IS NULL)
      * @param totalSessions  누적 채팅 세션 수
-     * @param totalUsers     전체 사용자 수 (활성/비활성 모두 포함 — 비활성 정의는 추후 확정)
+     * @param totalUsers     활성·프로필 완료된 일반 사용자 수
+     *                       (users WHERE role='user' AND is_active=true AND is_profile_completed=true).
+     *                       관리자 계정과 가입 중도 이탈(프로필 미완료) row는 통계 합계 정합성 보장을 위해 제외한다.
      */
     public record Overview(
             long totalQuestions,

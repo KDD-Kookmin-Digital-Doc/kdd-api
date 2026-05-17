@@ -66,6 +66,11 @@ public class AiServerClient {
      * 처리해야 한다. 본 메서드는 HTTP 레벨 오류만 {@link AiServerException}으로 래핑한다.
      */
     public AiFaqAnalyzeResponse analyzeFaq(AiFaqAnalyzeRequest request) {
+        // 내부 호출자(FaqCandidateScheduler)는 null/empty 질문 리스트를 만들지 않지만,
+        // 클라이언트 메서드가 try 진입 전 NPE로 떨어지면 AiServerException 래핑이 비어 호출자 catch가 무력화된다.
+        if (request == null || request.questions() == null) {
+            throw new AiServerException("AI analyzeFaq request/questions must not be null");
+        }
         log.info("[AI] analyzeFaq call: questions={}, top_k={}, min_cluster_size={}",
                 request.questions().size(), request.topK(), request.minClusterSize());
         try {
@@ -85,7 +90,11 @@ public class AiServerClient {
         } catch (AiServerException e) {
             throw e;
         } catch (RestClientResponseException e) {
-            log.error("[AI] analyzeFaq HTTP error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            // 응답 body는 AI가 echo한 질문/초안 텍스트(PII 포함 가능)를 그대로 담을 수 있어 운영 로그에 직접 남기지 않는다.
+            // 길이만 기록해 페이로드 규모 회귀를 감지하고, 상세는 AiServerException 메시지/스택트레이스로 위임.
+            String body = e.getResponseBodyAsString();
+            log.error("[AI] analyzeFaq HTTP error: status={}, body_length={}",
+                    e.getStatusCode(), body == null ? 0 : body.length());
             throw new AiServerException("AI analyzeFaq HTTP error: " + e.getStatusCode(), e);
         } catch (ResourceAccessException e) {
             log.error("[AI] analyzeFaq network error: {}", e.getMessage());

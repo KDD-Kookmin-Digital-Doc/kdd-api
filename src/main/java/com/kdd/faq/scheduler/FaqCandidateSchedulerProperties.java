@@ -23,7 +23,9 @@ import org.springframework.stereotype.Component;
 @Setter
 public class FaqCandidateSchedulerProperties {
 
-    private boolean enabled = true;
+    // 외부 AI 호출이 일어나므로 기본값은 비활성 — 운영(application-prod.yml)에서만 true로 오버라이드한다.
+    // YAML 바인딩 누락/오타로 빈 값이 들어와도 로컬·CI에서 의도치 않은 AI 호출이 발생하지 않도록 한다.
+    private boolean enabled = false;
     private String cron = "0 0 3 * * *";
     private int lookbackDays = 7;
     private int maxQuestions = 5_000;

@@ -41,6 +41,9 @@ public class FaqCandidateService {
     // 프롬프트 인젝션이 거대 페이로드로 후보 테이블/관리자 UI를 망가뜨리는 경로를 차단한다.
     private static final int MAX_QUESTION_LENGTH = 2000;
     private static final int MAX_ANSWER_DRAFT_LENGTH = 4000;
+    // 추천 질문 API limit 상한 — FE는 보통 5건만 노출하므로 20이면 충분한 여유. 큰 값으로 호출돼도
+    // PENDING 후보 전체 스캔/메모리 적재로 이어지지 않도록 차단한다.
+    private static final int MAX_RECOMMENDED_LIMIT = 20;
 
     // PII 정규식 — 학번(20YYXXXX), 이메일, 전화번호. 사용자 질문 원문이 AI 클러스터링/요약을 거쳐도
     // 그대로 후보 question에 들어올 수 있어, 추천 질문(FE 노출)로 새기 전 BE 단에서 한 번 더 마스킹한다.
@@ -164,14 +167,15 @@ public class FaqCandidateService {
             String trimmed = c.question().trim();
             // question NOT NULL 제약 위반 회피용 빈 문자열 가드.
             if (trimmed.isEmpty()) continue;
-            // AI 응답의 frequency가 음수로 도착하면 entity 생성자가 0으로 silently 정규화하므로
-            // upstream 회귀를 운영에서 인지할 수 있도록 warn 로깅만 남기고 정상 진행.
-            if (c.frequency() != null && c.frequency() < 0) {
-                log.warn("[FAQ] AI returned negative frequency — coerced to 0: question='{}', frequency={}",
-                        trimmed, c.frequency());
-            }
             // PII 마스킹 → 길이 제한 순으로 정규화. 마스킹이 끝난 결과로 길이를 자른다.
             String sanitizedQuestion = truncate(redactPii(trimmed), MAX_QUESTION_LENGTH);
+            // AI 응답의 frequency가 음수로 도착하면 entity 생성자가 0으로 silently 정규화하므로
+            // upstream 회귀를 운영에서 인지할 수 있도록 warn 로깅만 남기고 정상 진행.
+            // 로그 노출되는 question은 마스킹 후 문자열만 사용한다.
+            if (c.frequency() != null && c.frequency() < 0) {
+                log.warn("[FAQ] AI returned negative frequency — coerced to 0: question='{}', frequency={}",
+                        sanitizedQuestion, c.frequency());
+            }
             String sanitizedAnswer = c.draftAnswer() == null
                     ? null
                     : truncate(redactPii(c.draftAnswer()), MAX_ANSWER_DRAFT_LENGTH);
@@ -245,7 +249,7 @@ public class FaqCandidateService {
      */
     @Transactional(readOnly = true)
     public List<FaqCandidate> getRecommendedQuestions(int limit) {
-        if (limit < 1) {
+        if (limit < 1 || limit > MAX_RECOMMENDED_LIMIT) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
         return faqCandidateRepository.findTopRecommended(PageRequest.of(0, limit));
