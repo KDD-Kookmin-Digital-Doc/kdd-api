@@ -37,6 +37,23 @@ public class ChatMessagePersister {
     private final DocumentChunkRepository documentChunkRepository;
     private final UserContextBuilder userContextBuilder;
 
+    /**
+     * sendMessage 진입부에서 in-flight 락을 잡기 전에 호출된다 — 락은 sessionId만 보고 잡히므로,
+     * 다른 사용자가 남의 sessionId로 호출해도 락이 잠깐 점유되어 진짜 owner가 자기 세션에서 간헐적으로
+     * 409 CHAT_SESSION_BUSY를 받는 grief 시나리오를 차단한다.
+     * <p>
+     * 전체 엔티티 fetch 대신 user_id projection 쿼리만 돌려 cheap하게 검증.
+     * {@link #prepareAndSaveUserMessage}에 동일한 체크가 남아 있는 것은 defense-in-depth로 유지.
+     */
+    @Transactional(readOnly = true)
+    public void verifySessionOwnership(Long sessionId, Long userId) {
+        Long ownerId = chatSessionRepository.findUserIdById(sessionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
+        if (!ownerId.equals(userId)) {
+            throw new BusinessException(ErrorCode.SESSION_FORBIDDEN);
+        }
+    }
+
     // SSE 스트리밍 시작 전에 필요한 모든 DB 작업(세션·유저 검증, 컨텍스트/히스토리 조회, 사용자 메시지 저장)을
     // 한 트랜잭션에 묶어 짧게 끝낸다. open-in-view=false 환경에서 ChatSession.user / 프로필 조회 등의 lazy
     // 로딩이 안전하게 일어나도록 하면서, 트랜잭션 종료와 동시에 커넥션을 풀로 반환해 SSE 수십 초 동안

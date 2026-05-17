@@ -68,6 +68,10 @@ public class ChatMessageService {
     ) {}
 
     public SseEmitter sendMessage(Long sessionId, Long userId, String content) {
+        // ownership을 락보다 먼저 검증한다. 그러지 않으면 다른 사용자가 남의 sessionId로 호출해도 락이 잠깐 점유되어
+        // 진짜 owner가 자기 세션에서 간헐적으로 409 CHAT_SESSION_BUSY를 받는 grief가 가능하다.
+        persister.verifySessionOwnership(sessionId, userId);
+
         // 동일 세션이 이미 AI 스트림을 진행 중이면 두 번째 호출은 rate limit 차감 전에 즉시 거절.
         // 사용자가 부당하게 한도 1회를 소모하지 않도록 검증/차감보다 먼저 막는다.
         if (!tryAcquireSession(sessionId)) {
@@ -152,9 +156,9 @@ public class ChatMessageService {
      * 마무리 작업: terminal 플래그 점유 → 부분 답변 영속화 → rate-limit 차감 보상 → ErrorEvent 송신 → safeComplete.
      * 호출자는 자신만의 로깅(원인 정보)만 따로 찍으면 된다.
      * <p>
-     * 내부 terminal 가드는 사실상 handleEvent catch 경로 전용 — handleDone이 terminal=true로 잡은 뒤
-     * saveAssistantMessage 도중 throw해 catch로 떨어진 케이스에서 partial-save·차감 보상이 두 번 수행되는 것을 막는다.
-     * handleStreamError/handleStreamComplete는 이 메서드 호출 전 이미 pre-gate로 terminal 여부를 거른다.
+     * 내부 terminal 가드는 case "error" 처리 후 후속 onNext/Reactor 종료 신호가 같은 정리를 반복 수행하는 것을 막는
+     * idempotency 보호 — 정상 흐름에서는 호출자가 이미 pre-gate(handleStreamError/handleStreamComplete) 또는
+     * 자연스러운 terminal=false 상태(handleEvent catch)로 진입한다.
      */
     private void finalizeUnexpectedFailure(StreamCtx ctx, String userMessage) {
         if (!ctx.terminalReceived().get()) {
@@ -242,8 +246,11 @@ public class ChatMessageService {
                 case "fallback" -> handleFallback(ctx, node);
                 case "text" -> handleText(ctx, node);
                 case "done" -> {
-                    ctx.terminalReceived().set(true);
+                    // terminal을 save 이후에 set한다. handleDone 안 saveAssistantMessage가 throw하면
+                    // 트랜잭션이 rollback되어 DB에는 row가 없으니 terminal=false 상태로 catch에 떨어져
+                    // partial=true로 보존되어야 한다. 순서를 뒤집으면 사용자가 본 답변이 영원히 유실됨.
                     handleDone(ctx);
+                    ctx.terminalReceived().set(true);
                 }
                 case "error" -> {
                     ctx.terminalReceived().set(true);
