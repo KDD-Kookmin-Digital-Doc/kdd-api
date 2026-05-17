@@ -253,13 +253,10 @@ public class ChatMessageService {
                     ctx.terminalReceived().set(true);
                 }
                 case "error" -> {
-                    // case "done"과 동일한 패턴 — terminal은 부수 작업 이후에 set. handleAiError는 현재 throw할 수 없는
-                    // 구조(trySend/safeComplete 모두 내부 swallow)지만, 향후 어떤 줄이 추가돼도 throw 시 catch가
-                    // terminal=false 상태로 진입해 일관된 정리가 가능하도록 둔다.
-                    // AI가 명시적 error 이벤트를 보낸 케이스 — 답변 생성을 시도했으나 실패. 사용자는 답을 못 받음 → 차감 보상.
-                    handleAiError(ctx, node);
-                    safelyDecrement(ctx.userId(), ctx.rateLimit().usageDate());
                     ctx.terminalReceived().set(true);
+                    // AI가 명시적 error 이벤트를 보낸 케이스 — 답변 생성을 시도했으나 실패. 사용자는 답을 못 받음 → 차감 보상.
+                    safelyDecrement(ctx.userId(), ctx.rateLimit().usageDate());
+                    handleAiError(ctx, node);
                 }
                 default -> log.warn("Unknown SSE event type: {}", type);
             }
