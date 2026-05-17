@@ -71,19 +71,37 @@ public class StatisticsRepository {
                 .toList();
     }
 
+    // ---------------------------------------------------------------------
+    // 사용자 인원 통계 (메시지 수가 아닌 "사람 수").
+    // 명세 §"통계 조회" - users 섹션. 메시지 수와 분리된 별도 집계로, 한 학생이 여러 질문을 보내도 1명으로 계산.
+    // ---------------------------------------------------------------------
+
     /**
-     * 사용자 유형별 사용자 질문 수.
-     * chat_messages(role='user') → chat_sessions → users 조인 후 user_type 으로 group.
-     * 결과는 user_type → count 맵으로 반환 (없는 타입은 호출자가 0으로 보충).
+     * 전체 사용자 수 — 시연·운영 관리 계정(role='admin')과 비활성 계정(is_active=false), 그리고
+     * 프로필 미완료 사용자(is_profile_completed=false)는 제외.
+     * <p>
+     * is_profile_completed=true 필터가 중요한 이유: byUserType/byDepartment/byGrade는 student_profiles
+     * 또는 user_type 필드에 의존하므로 프로필 미완료 사용자가 자동으로 누락된다. totalUsers에도 동일한
+     * 필터를 걸어야 응답 내 합계 정합성(totalUsers == byUserType.sum())이 유지된다.
+     */
+    public long countTotalUsers() {
+        Object result = em.createNativeQuery(
+                "SELECT COUNT(*) FROM users WHERE role = 'user' AND is_active = true AND is_profile_completed = true"
+        ).getSingleResult();
+        return ((Number) result).longValue();
+    }
+
+    /**
+     * 사용자 유형별 인원 수 (학생/교직원). user_type은 'student'/'staff' 두 값.
+     * 프로필 미완료 사용자는 user_type이 null일 수 있으므로 is_profile_completed=true로 필터해
+     * totalUsers와 합 정합성을 유지한다.
      */
     @SuppressWarnings("unchecked")
-    public Map<String, Long> countUserMessagesByUserType() {
+    public Map<String, Long> countUsersByUserType() {
         List<Object[]> rows = em.createNativeQuery("""
-                SELECT u.user_type AS user_type, COUNT(*) AS msg_count
-                FROM chat_messages cm
-                JOIN chat_sessions cs ON cs.id = cm.session_id
-                JOIN users u ON u.id = cs.user_id
-                WHERE cm.role = 'user'
+                SELECT u.user_type AS user_type, COUNT(*) AS user_count
+                FROM users u
+                WHERE u.role = 'user' AND u.is_active = true AND u.is_profile_completed = true
                 GROUP BY u.user_type
                 """).getResultList();
 
@@ -91,6 +109,64 @@ public class StatisticsRepository {
                 row -> (String) row[0],
                 row -> ((Number) row[1]).longValue()
         ));
+    }
+
+    /**
+     * 학생 학과별 인원 수 (software/ai). 교직원은 student_profiles에 없으므로 자동 제외.
+     * admin/비활성/프로필 미완료 user의 student_profile(존재한다면)도 통계에서 빼기 위해 users JOIN으로 필터.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Long> countStudentsByDepartment() {
+        List<Object[]> rows = em.createNativeQuery("""
+                SELECT sp.department AS department, COUNT(*) AS user_count
+                FROM student_profiles sp
+                JOIN users u ON u.id = sp.user_id
+                WHERE u.role = 'user' AND u.is_active = true AND u.is_profile_completed = true
+                GROUP BY sp.department
+                """).getResultList();
+
+        return rows.stream().collect(Collectors.toMap(
+                row -> (String) row[0],
+                row -> ((Number) row[1]).longValue()
+        ));
+    }
+
+    /**
+     * 학생 학년별 인원 수.
+     * <p>
+     * 1학년 미만(0/음수 회귀)은 '1' 버킷으로 클램프, 5학년 이상은 '5_or_above'로 누적해
+     * Service 측 getOrDefault 키('1'~'4','5_or_above') 외 버킷이 만들어져 row가 silent하게
+     * 사라지는 일이 없도록 한다 (DTO 검증 누락에 대한 보호선).
+     * <p>
+     * admin/비활성/프로필 미완료 user는 분포에서 제외 — totalUsers와의 정합성 유지.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Long> countStudentsByGrade() {
+        List<Object[]> rows = em.createNativeQuery("""
+                SELECT CASE
+                           WHEN sp.grade <= 1 THEN '1'
+                           WHEN sp.grade >= 5 THEN '5_or_above'
+                           ELSE CAST(sp.grade AS TEXT)
+                       END AS grade_bucket,
+                       COUNT(*) AS user_count
+                FROM student_profiles sp
+                JOIN users u ON u.id = sp.user_id
+                WHERE u.role = 'user' AND u.is_active = true AND u.is_profile_completed = true
+                GROUP BY grade_bucket
+                """).getResultList();
+
+        return rows.stream().collect(Collectors.toMap(
+                row -> (String) row[0],
+                row -> ((Number) row[1]).longValue()
+        ));
+    }
+
+    /** 누적 채팅 세션 수 (chat_sessions 테이블 전체 row 수). */
+    public long countTotalSessions() {
+        Object result = em.createNativeQuery(
+                "SELECT COUNT(*) FROM chat_sessions"
+        ).getSingleResult();
+        return ((Number) result).longValue();
     }
 
     public record CategoryCount(String category, long questionCount) {}
