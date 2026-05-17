@@ -5,9 +5,11 @@ import com.kdd.chat.service.ChatMessageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,6 +21,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RestController
 @RequestMapping("/chat/sessions/{sessionId}/messages")
 @RequiredArgsConstructor
+@Validated
 public class ChatMessageController {
 
     private final ChatMessageService chatMessageService;
@@ -28,7 +31,9 @@ public class ChatMessageController {
     @PostMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter sendMessage(
             @AuthenticationPrincipal Long userId,
-            @PathVariable Long sessionId,
+            // 음수/0 sessionId는 정상 호출로 도달할 수 없는데 컨트롤러에서 막지 않으면 매 호출이 ownership 쿼리까지 흘러
+            // 무료 probe·로그 노이즈 amplification 벡터가 된다. 경계에서 400으로 차단.
+            @PathVariable @Min(1) Long sessionId,
             @Valid @RequestBody ChatMessageRequest request) {
         return chatMessageService.sendMessage(sessionId, userId, request.content());
     }
