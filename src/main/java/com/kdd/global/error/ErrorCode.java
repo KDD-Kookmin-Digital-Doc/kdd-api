@@ -38,6 +38,8 @@ public enum ErrorCode {
 
     // FAQ
     FAQ_NOT_FOUND(HttpStatus.NOT_FOUND, "FAQ_NOT_FOUND", "존재하지 않는 FAQ입니다."),
+    CANDIDATE_NOT_FOUND(HttpStatus.NOT_FOUND, "CANDIDATE_NOT_FOUND", "존재하지 않는 FAQ 후보입니다."),
+    CANDIDATE_ALREADY_PROCESSED(HttpStatus.CONFLICT, "CANDIDATE_ALREADY_PROCESSED", "이미 처리된 FAQ 후보입니다."),
 
     // Common
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "인증이 필요합니다."),
@@ -45,6 +47,7 @@ public enum ErrorCode {
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "INVALID_INPUT", "입력값이 올바르지 않습니다."),
     CONFIRMATION_REQUIRED(HttpStatus.BAD_REQUEST, "CONFIRMATION_REQUIRED", "파괴적 작업 호출 시 confirm 파라미터가 필요하거나 값이 올바르지 않습니다."),
     PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE", "업로드 파일 크기 한도를 초과했습니다."),
+    LOCK_CONFLICT(HttpStatus.CONFLICT, "LOCK_CONFLICT", "동시 작업으로 일시적인 충돌이 발생했습니다. 잠시 후 다시 시도해주세요."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다.");
 
     private final HttpStatus status;
