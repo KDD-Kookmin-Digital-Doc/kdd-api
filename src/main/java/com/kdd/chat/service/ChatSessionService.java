@@ -28,18 +28,33 @@ public class ChatSessionService {
     private static final int MAX_PAGE_SIZE = 100;
 
     @Transactional
-    public ChatSessionCreateResponse createSession(Long userId) {
+    public ChatSessionCreateResponse createSession(Long userId, String requestedSourceType) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        // FE가 sourceType을 보내지 않거나 알 수 없는 값이면 NORMAL로 폴백 — 일반 채팅 진입 호환성 유지.
+        // 알 수 없는 값에 대해 400을 던지면 FE 회귀로 채팅 자체가 막혀버리므로 보수적으로 fallback 한다.
+        SourceType resolved = resolveSourceType(requestedSourceType);
 
         ChatSession session = ChatSession.builder()
                 .user(user)
                 .title(DEFAULT_TITLE)
-                .sourceType(SourceType.NORMAL)
+                .sourceType(resolved)
                 .build();
         chatSessionRepository.save(session);
 
         return ChatSessionCreateResponse.from(session);
+    }
+
+    private SourceType resolveSourceType(String value) {
+        if (value == null || value.isBlank()) {
+            return SourceType.NORMAL;
+        }
+        try {
+            return SourceType.from(value);
+        } catch (IllegalArgumentException e) {
+            return SourceType.NORMAL;
+        }
     }
 
     public PageResponse<ChatSessionListResponse> getSessions(Long userId, String keyword, int page, int pageSize) {
