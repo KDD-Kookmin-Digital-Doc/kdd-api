@@ -14,6 +14,8 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.List;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -93,6 +95,13 @@ public class AiServerClient {
             // 응답 body는 AI가 echo한 질문/초안 텍스트(PII 포함 가능)를 그대로 담을 수 있어 운영 로그에 직접 남기지 않는다.
             // 길이만 기록해 페이로드 규모 회귀를 감지하고, 상세는 AiServerException 메시지/스택트레이스로 위임.
             String body = e.getResponseBodyAsString();
+            // AI 서버는 데이터 부족(INSUFFICIENT_DATA)을 HTTP 400 + {error_code:"INSUFFICIENT_DATA"}로 반환한다.
+            // 정상 운영 패턴(초기 가입자 적은 시기 등)이므로 status:"error" 응답으로 매핑해 호출자(스케줄러)가
+            // 정상 종료(다음 주기 재시도)할 수 있게 한다. 매 cron tick마다 ERROR 로그가 쌓이는 false-positive를 차단.
+            if (e.getStatusCode().value() == 400 && body != null && body.contains("INSUFFICIENT_DATA")) {
+                log.info("[AI] analyzeFaq insufficient data — treated as normal exit");
+                return new AiFaqAnalyzeResponse("error", List.of(), "INSUFFICIENT_DATA");
+            }
             log.error("[AI] analyzeFaq HTTP error: status={}, body_length={}",
                     e.getStatusCode(), body == null ? 0 : body.length());
             throw new AiServerException("AI analyzeFaq HTTP error: " + e.getStatusCode(), e);
