@@ -15,9 +15,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -26,18 +23,18 @@ public class ChatSessionService {
     private final ChatSessionRepository chatSessionRepository;
     private final UserRepository userRepository;
 
-    private static final DateTimeFormatter TITLE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+    // 세션 생성 직후 잠깐 노출되는 placeholder. 첫 질문이 전송되면 프론트가 첫 15글자로 PATCH 덮어쓴다.
+    private static final String DEFAULT_TITLE = "새 채팅";
     private static final int MAX_PAGE_SIZE = 100;
 
     @Transactional
     public ChatSessionCreateResponse createSession(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        String title = LocalDateTime.now().format(TITLE_FORMATTER);
 
         ChatSession session = ChatSession.builder()
                 .user(user)
-                .title(title)
+                .title(DEFAULT_TITLE)
                 .sourceType(SourceType.NORMAL)
                 .build();
         chatSessionRepository.save(session);

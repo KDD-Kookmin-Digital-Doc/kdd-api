@@ -16,8 +16,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -25,13 +23,13 @@ import java.util.List;
  * <p>
  * FAQ 도메인이 Chat 도메인에 의존하는 단방향 흐름이므로 FaqService에 메서드를 추가하는 대신
  * 별도 서비스로 분리해 FaqService(순수 FAQ CRUD)의 책임을 좁게 유지한다.
- * 세션 제목 포맷은 일반 채팅 세션 생성과 동일한 규칙(yyyyMMdd_HHmmss)을 따른다.
+ * 세션 제목은 ChatSessionService와 동일한 placeholder를 사용한다 — 첫 질문 전송 시 프론트가 PATCH로 덮어쓴다.
  */
 @Service
 @RequiredArgsConstructor
 public class FaqChatService {
 
-    private static final DateTimeFormatter TITLE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+    private static final String DEFAULT_TITLE = "새 채팅";
 
     private final FaqService faqService;
     private final UserRepository userRepository;
@@ -53,7 +51,7 @@ public class FaqChatService {
 
         ChatSession session = chatSessionRepository.save(ChatSession.builder()
                 .user(user)
-                .title(LocalDateTime.now().format(TITLE_FORMATTER))
+                .title(DEFAULT_TITLE)
                 .sourceType(SourceType.FAQ)
                 .build());
 
