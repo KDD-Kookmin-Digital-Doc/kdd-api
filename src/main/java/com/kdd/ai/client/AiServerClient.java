@@ -3,6 +3,8 @@ package com.kdd.ai.client;
 import com.kdd.ai.dto.AiDeleteResponse;
 import com.kdd.ai.dto.AiEmbedRequest;
 import com.kdd.ai.dto.AiEmbedResponse;
+import com.kdd.ai.dto.AiFaqAnalyzeRequest;
+import com.kdd.ai.dto.AiFaqAnalyzeResponse;
 import com.kdd.ai.exception.AiServerException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +13,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
+
+import java.util.List;
 
 @Slf4j
 @Component
@@ -50,6 +54,63 @@ public class AiServerClient {
         } catch (Exception e) {
             log.error("[AI] embed unexpected error", e);
             throw new AiServerException("AI embed unexpected error: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * AI 서버에 인기 질문 클러스터링 + 답변 초안 생성 요청.
+     * <p>
+     * BE 스케줄러가 ChatMessage 테이블의 최근 사용자 질문(role='user')을 추출하여 questions 배열로 전달하고,
+     * AI는 클러스터링하여 인기 질문 top_k개와 답변 초안을 반환한다. 결과는 FAQ 후보로 영속화되며
+     * 채팅 전 추천 질문 노출에도 동일 데이터가 사용된다 (BE-AI 명세 §2 - 인기 질문 TOP 5 & FAQ 후보 생성).
+     * <p>
+     * 데이터 부족(INSUFFICIENT_DATA)은 status="error"로 반환되며 호출부에서 정상 종료(다음 주기 재시도)로
+     * 처리해야 한다. 본 메서드는 HTTP 레벨 오류만 {@link AiServerException}으로 래핑한다.
+     */
+    public AiFaqAnalyzeResponse analyzeFaq(AiFaqAnalyzeRequest request) {
+        // 내부 호출자(FaqCandidateScheduler)는 null/empty 질문 리스트를 만들지 않지만,
+        // 클라이언트 메서드가 try 진입 전 NPE로 떨어지면 AiServerException 래핑이 비어 호출자 catch가 무력화된다.
+        if (request == null || request.questions() == null) {
+            throw new AiServerException("AI analyzeFaq request/questions must not be null");
+        }
+        log.info("[AI] analyzeFaq call: questions={}, top_k={}, min_cluster_size={}",
+                request.questions().size(), request.topK(), request.minClusterSize());
+        try {
+            AiFaqAnalyzeResponse response = aiServerRestClient.post()
+                    .uri("/api/faq/analyze")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(request)
+                    .retrieve()
+                    .body(AiFaqAnalyzeResponse.class);
+
+            if (response == null) {
+                throw new AiServerException("AI analyzeFaq returned null response");
+            }
+            int candidateCount = response.candidates() == null ? 0 : response.candidates().size();
+            log.info("[AI] analyzeFaq result: status={}, candidates={}", response.status(), candidateCount);
+            return response;
+        } catch (AiServerException e) {
+            throw e;
+        } catch (RestClientResponseException e) {
+            // 응답 body는 AI가 echo한 질문/초안 텍스트(PII 포함 가능)를 그대로 담을 수 있어 운영 로그에 직접 남기지 않는다.
+            // 길이만 기록해 페이로드 규모 회귀를 감지하고, 상세는 AiServerException 메시지/스택트레이스로 위임.
+            String body = e.getResponseBodyAsString();
+            // AI 서버는 데이터 부족(INSUFFICIENT_DATA)을 HTTP 400 + {error_code:"INSUFFICIENT_DATA"}로 반환한다.
+            // 정상 운영 패턴(초기 가입자 적은 시기 등)이므로 status:"error" 응답으로 매핑해 호출자(스케줄러)가
+            // 정상 종료(다음 주기 재시도)할 수 있게 한다. 매 cron tick마다 ERROR 로그가 쌓이는 false-positive를 차단.
+            if (e.getStatusCode().value() == 400 && body != null && body.contains("INSUFFICIENT_DATA")) {
+                log.info("[AI] analyzeFaq insufficient data — treated as normal exit");
+                return new AiFaqAnalyzeResponse("error", List.of(), "INSUFFICIENT_DATA");
+            }
+            log.error("[AI] analyzeFaq HTTP error: status={}, body_length={}",
+                    e.getStatusCode(), body == null ? 0 : body.length());
+            throw new AiServerException("AI analyzeFaq HTTP error: " + e.getStatusCode(), e);
+        } catch (ResourceAccessException e) {
+            log.error("[AI] analyzeFaq network error: {}", e.getMessage());
+            throw new AiServerException("AI analyzeFaq network error: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("[AI] analyzeFaq unexpected error", e);
+            throw new AiServerException("AI analyzeFaq unexpected error: " + e.getMessage(), e);
         }
     }
 

@@ -22,7 +22,6 @@ public enum ErrorCode {
     // Document
     DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "DOCUMENT_NOT_FOUND", "존재하지 않는 문서입니다."),
     CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "CATEGORY_NOT_FOUND", "존재하지 않는 카테고리입니다."),
-    PARENT_CATEGORY_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "PARENT_CATEGORY_NOT_ALLOWED", "하위 카테고리로만 문서를 조회할 수 있습니다."),
     INVALID_FILE_TYPE(HttpStatus.BAD_REQUEST, "INVALID_FILE_TYPE", "지원하지 않는 파일 형식입니다."),
     DOCUMENT_ALREADY_PROCESSING(HttpStatus.CONFLICT, "DOCUMENT_ALREADY_PROCESSING", "문서가 이미 처리 중입니다."),
 

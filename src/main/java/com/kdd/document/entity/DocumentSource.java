@@ -10,14 +10,13 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum DocumentSource {
 
-    SW("sw"),
-    KMU("kmu");
+    SW("SW"),
+    KMU("KMU");
 
     private final String value;
 
-    // 입력(API 요청 body)은 lowercase value("sw", "kmu")로 받고
-    // DB 컬럼도 lowercase로 저장하므로, 응답 직렬화도 lowercase로 통일한다 (#60).
-    // 기존엔 name()이라 응답은 "SW"인데 같은 값을 그대로 요청에 넣으면 400으로 거절됐다.
+    // 요청·응답·DB 모두 대문자("SW"/"KMU")로 통일. 노션 API 명세(2026-05-17판)가 대문자 리터럴이며
+    // FE 타입도 이미 "SW" | "KMU"로 정의되어 있다. #60에서 lowercase로 일시 통일했던 것을 명세 정합으로 되돌림.
     @JsonValue
     public String toJson() {
         return value;

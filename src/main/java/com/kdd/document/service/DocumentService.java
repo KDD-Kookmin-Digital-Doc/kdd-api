@@ -8,6 +8,7 @@ import com.kdd.document.dto.*;
 import com.kdd.document.entity.*;
 import com.kdd.document.repository.DocumentCategoryRepository;
 import com.kdd.document.repository.DocumentRepository;
+import com.kdd.document.repository.DocumentViewRepository;
 import com.kdd.document.storage.DocumentFileStorage;
 import com.kdd.global.error.BusinessException;
 import com.kdd.global.error.ErrorCode;
@@ -32,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class DocumentService {
 
     private final DocumentRepository documentRepository;
+    private final DocumentViewRepository documentViewRepository;
     private final DocumentCategoryRepository categoryRepository;
     private final DocumentPersistenceService persistenceService;
     private final AiServerClient aiServerClient;
@@ -39,6 +41,8 @@ public class DocumentService {
 
     private static final int POPULAR_DAYS = 7;
     private static final int POPULAR_LIMIT = 10;
+    // 요구사항 3-(2)-5: 동일 사용자+문서 10분 내 중복 조회는 1회로 집계.
+    private static final int VIEW_DEDUP_MINUTES = 10;
     // 인증된 클라이언트가 pageSize=Integer.MAX_VALUE 등 비정상 값으로 전체 테이블을 읽거나
     // 인기 정렬 native query(chat_message_sources JOIN)로 DB 부하를 폭증시키지 못하도록 차단 (#58).
     private static final int MAX_PAGE_SIZE = 100;
@@ -195,31 +199,59 @@ public class DocumentService {
         categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
 
-        // 하위 카테고리가 존재하면 상위 카테고리이므로 조회 차단
+        // 요구사항 3-(2)-2: 상위 카테고리 선택 시 하위 카테고리 문서도 함께 조회한다.
+        // searchDocuments와 동일한 expansion 정책을 적용 — 단일 카테고리는 그대로, 상위는 자손까지 평탄화.
         List<DocumentCategory> all = categoryRepository.findAllOrdered();
-        boolean hasChildren = all.stream()
-                .anyMatch(c -> c.getParent() != null && c.getParent().getId().equals(categoryId));
-        if (hasChildren) {
-            throw new BusinessException(ErrorCode.PARENT_CATEGORY_NOT_ALLOWED);
-        }
+        List<Long> categoryIds = new ArrayList<>();
+        collectCategoryIds(categoryId, all, categoryIds);
 
         return PageResponse.from(
-                documentRepository.findByCategoryIds(List.of(categoryId),
+                documentRepository.findByCategoryIds(categoryIds,
                         PageRequest.of(page, pageSize, Sort.by("updatedAt", "id").descending())),
                 DocumentByCategoryResponse::from
         );
     }
 
     @Transactional
-    public DocumentDetailPublicResponse getDocumentDetail(Long documentId) {
-        // 단일 UPDATE로 status=COMPLETED + view_count +1을 원자적으로 처리.
-        // affected rows = 0이면 대상 문서 없음(미존재 / 삭제 / NOT COMPLETED) → 404.
-        // 분리된 SELECT-then-UPDATE 흐름이 가졌던 reprocess race condition 차단.
-        int affected = documentRepository.incrementViewCount(documentId);
-        if (affected == 0) {
-            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+    public DocumentDetailPublicResponse getDocumentDetail(Long documentId, Long userId, boolean isAdmin) {
+        // 진입부에서 documentId 유효성 검증을 선행한다. insertIfAbsent는 document_id FK 제약이 걸려 있어
+        // 잘못된 id가 넘어오면 PG가 ConstraintViolationException을 던지고, 트랜잭션이 aborted 상태가 되어
+        // 후속 쿼리까지 모두 실패한다. 사전 fetch로 깔끔한 404를 돌려주고, 최종 응답도 같은 인스턴스를 재사용.
+        Document document = findCompletedDocumentOrThrow(documentId);
+
+        // 관리자 조회는 view_count/document_views 추적에서 제외 — 명세 "관리자 및 테스트 계정의 이벤트는
+        // 집계에서 제외" 정책 + popular 쿼리의 admin 필터(u.role <> 'admin')와 일관성 유지.
+        if (isAdmin) {
+            return DocumentDetailPublicResponse.from(document);
         }
-        Document document = findDocumentOrThrow(documentId);
+
+        // 요구사항 3-(2)-5: 동일 사용자+문서 10분 내 중복 조회는 view_count 누적 및 이벤트 적재를 모두 스킵.
+        // 두 작업이 분리되면 view_count(누적)와 인기 점수 윈도우 집계가 어긋날 수 있어 dedup 분기는 하나로 묶는다.
+        // existsWithinWindow는 native query로 DB now()를 기준 — JVM/PG TZ 불일치 방어.
+        boolean withinDedupWindow = documentViewRepository.existsWithinWindow(
+                documentId, userId, VIEW_DEDUP_MINUTES);
+
+        if (!withinDedupWindow) {
+            // V9의 (document_id, user_id, 10분 epoch 버킷) unique 인덱스 + ON CONFLICT DO NOTHING으로
+            // read-then-write race를 DB 레벨에서 차단. 두 동시 요청이 모두 existsWithinWindow=false를 봐도
+            // 실제 INSERT는 한 번만 성공하고, 두 번째 시도는 inserted=0을 받아 view_count 증가도 함께 건너뛴다.
+            // ConstraintViolationException 캐치 대신 ON CONFLICT를 쓰는 이유: PG는 violation 발생 시 TX를
+            // aborted 상태로 만들어 후속 쿼리가 모두 실패하지만, ON CONFLICT는 DB가 swallow 해주므로 안전.
+            int inserted = documentViewRepository.insertIfAbsent(documentId, userId);
+            if (inserted == 1) {
+                // 단일 UPDATE로 status=COMPLETED + view_count +1을 원자적으로 처리.
+                // affected rows = 0이면 대상 문서 없음(미존재 / 삭제 / NOT COMPLETED) → 404.
+                // 분리된 SELECT-then-UPDATE 흐름이 가졌던 reprocess race condition 차단.
+                int affected = documentRepository.incrementViewCount(documentId);
+                if (affected == 0) {
+                    throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+                }
+            } else {
+                log.debug("[Document] view dedup race resolved by unique constraint: doc={}, user={}",
+                        documentId, userId);
+            }
+        }
+
         return DocumentDetailPublicResponse.from(document);
     }
 
@@ -306,10 +338,10 @@ public class DocumentService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<DocumentListResponse> getDocuments(int page, int size) {
-        validatePageParams(page, size);
+    public PageResponse<DocumentListResponse> getDocuments(int page, int pageSize) {
+        validatePageParams(page, pageSize);
         return PageResponse.from(
-                documentRepository.findAllActive(PageRequest.of(page, size, Sort.by("createdAt", "id").descending())),
+                documentRepository.findAllActive(PageRequest.of(page, pageSize, Sort.by("createdAt", "id").descending())),
                 DocumentListResponse::from
         );
     }

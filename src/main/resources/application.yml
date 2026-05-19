@@ -27,6 +27,12 @@ spring:
     multipart:
       max-file-size: 100MB
       max-request-size: 100MB
+  task:
+    scheduling:
+      # 스케줄러 풀 기본값(1)이면 cron 잡끼리 직렬 실행되어 다른 잡을 지연시킨다.
+      # AuthSessionCleanupJob/FaqCandidateScheduler 등 독립 잡이 병행되도록 풀 확장.
+      pool:
+        size: 4
 
 app:
   jwt:
@@ -54,3 +60,16 @@ ai:
     base-url: ${AI_SERVER_URL}
     connect-timeout: ${AI_SERVER_CONNECT_TIMEOUT:5000}
     read-timeout: ${AI_SERVER_READ_TIMEOUT:120000}
+
+# FAQ 후보 자동 인입 스케줄러 — BE-AI 명세 §2 (인기 질문 TOP 5 & FAQ 후보 생성).
+# 기본 false: 로컬/CI/테스트에서 외부 AI 호출 차단. 운영(prod)은 application-prod.yml에서 true로 오버라이드.
+# cron은 Spring 6필드(초·분·시·일·월·요일).
+faq:
+  candidate:
+    scheduler:
+      enabled: ${FAQ_CANDIDATE_SCHEDULER_ENABLED:false}
+      cron: ${FAQ_CANDIDATE_SCHEDULER_CRON:0 0 3 * * *}
+      lookback-days: ${FAQ_CANDIDATE_SCHEDULER_LOOKBACK_DAYS:7}
+      max-questions: ${FAQ_CANDIDATE_SCHEDULER_MAX_QUESTIONS:5000}
+      top-k: ${FAQ_CANDIDATE_SCHEDULER_TOP_K:5}
+      min-cluster-size: ${FAQ_CANDIDATE_SCHEDULER_MIN_CLUSTER:2}

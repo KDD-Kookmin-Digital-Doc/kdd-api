@@ -31,12 +31,17 @@ public class AdminDocumentController {
                 .body(documentService.upload(file, data));
     }
 
-    @Operation(summary = "관리자 문서 목록 조회", description = "관리자가 문서 목록을 조회한다.")
+    @Operation(summary = "관리자 문서 목록 조회",
+            description = "관리자가 문서 목록을 조회한다. page는 0부터 시작. 페이지 크기는 pageSize 권장(size alias도 호환).")
     @GetMapping
     public ResponseEntity<PageResponse<DocumentListResponse>> getDocuments(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(documentService.getDocuments(page, size));
+            @RequestParam(name = "pageSize", required = false) Integer pageSize,
+            @RequestParam(name = "size", required = false) Integer size) {
+        // 공식 파라미터명은 pageSize(노션 명세). FE 일부가 Spring Pageable 관례를 따라 size로 보내는 경우가 있어
+        // 호환을 위해 size alias도 받는다. 둘 다 오면 명세 우선(pageSize) — pageSize가 null일 때만 size 사용.
+        int effectiveSize = pageSize != null ? pageSize : (size != null ? size : 20);
+        return ResponseEntity.ok(documentService.getDocuments(page, effectiveSize));
     }
 
     @Operation(summary = "문서 카테고리 수정", description = "관리자가 문서의 카테고리를 변경한다.")

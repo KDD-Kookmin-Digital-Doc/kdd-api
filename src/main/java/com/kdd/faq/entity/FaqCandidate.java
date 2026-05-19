@@ -17,7 +17,8 @@ import java.time.LocalDateTime;
  * 관리자는 카테고리를 지정해 승인(→ FAQ 변환)하거나 반려할 수 있다.
  * <p>
  * 상태 전이: {@code PENDING → APPROVED}(faqId 채워짐) 또는 {@code PENDING → REJECTED}. 한 번 종료된 후보는 재전이 불가.
- * AI 응답의 frequency는 ERD에 저장 컬럼이 없어 영속화하지 않는다.
+ * AI 응답의 {@code frequency}(클러스터 빈도)는 V7 마이그레이션으로 추가된 컬럼에 저장하여
+ * 관리자 검토 화면에서 승인 우선순위 판단 근거로 사용한다.
  */
 @Entity
 @Table(name = "faq_candidates")
@@ -49,6 +50,11 @@ public class FaqCandidate {
     @Column(name = "faq_id")
     private Long faqId;
 
+    // AI 응답의 클러스터 빈도. 사용자 질문 N개가 이 후보 질문으로 클러스터링됐는지를 의미.
+    // V7 마이그레이션으로 NOT NULL DEFAULT 0이라 기본값을 정수 0으로 설정.
+    @Column(nullable = false)
+    private int frequency;
+
     @Column(name = "approved_at")
     private LocalDateTime approvedAt;
 
@@ -61,10 +67,12 @@ public class FaqCandidate {
     private LocalDateTime updatedAt;
 
     @Builder
-    public FaqCandidate(String question, String answerDraft, FaqTopic category) {
+    public FaqCandidate(String question, String answerDraft, FaqTopic category, Integer frequency) {
         this.question = question;
         this.answerDraft = answerDraft;
         this.category = category;
+        // AI 분석 응답에 frequency가 누락된 경우(이전 시드/수동 인입)도 NOT NULL 제약을 만족시키도록 0으로 정규화.
+        this.frequency = (frequency == null || frequency < 0) ? 0 : frequency;
         this.status = FaqCandidateStatus.PENDING;
     }
 

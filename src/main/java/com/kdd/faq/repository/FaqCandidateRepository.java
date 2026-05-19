@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface FaqCandidateRepository extends JpaRepository<FaqCandidate, Long> {
@@ -19,6 +20,20 @@ public interface FaqCandidateRepository extends JpaRepository<FaqCandidate, Long
      * REJECTED 후보도 row는 보존되지만 일반 목록(PENDING)에 노출되지 않도록 service가 PENDING으로 호출한다.
      */
     Page<FaqCandidate> findByStatus(FaqCandidateStatus status, Pageable pageable);
+
+    /**
+     * 채팅 시작 전 추천 질문 노출용 — 가장 최근 인입된 PENDING 후보를 frequency 내림차순으로 N개 반환.
+     * 명세서 §"채팅 시작 전 추천 질문 조회"의 "TOP 5" 데이터 소스로 동일 후보 row를 재사용한다
+     * (별도 캐시 테이블 없이 단일 source of truth 유지).
+     * frequency가 동일하면 최신 createdAt 우선 — 같은 인입 주기 내 동률 시 인입 순서 유지.
+     */
+    @Query("""
+            select c
+            from FaqCandidate c
+            where c.status = com.kdd.faq.entity.FaqCandidateStatus.PENDING
+            order by c.frequency desc, c.createdAt desc, c.id desc
+            """)
+    List<FaqCandidate> findTopRecommended(Pageable pageable);
 
     /**
      * 승인/반려용 row-level write lock 조회.

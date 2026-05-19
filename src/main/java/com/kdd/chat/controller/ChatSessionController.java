@@ -21,11 +21,17 @@ public class ChatSessionController {
 
     private final ChatSessionService chatSessionService;
 
-    @Operation(summary = "채팅 세션 생성", description = "새로운 채팅 세션을 생성한다. 세션 제목은 서버에서 날짜+시간 기반으로 자동 생성한다.")
+    @Operation(summary = "채팅 세션 생성",
+            description = "새로운 채팅 세션을 생성한다. 세션 제목은 서버에서 날짜+시간 기반으로 자동 생성한다. " +
+                    "body는 optional이며 sourceType=\"recommended\" 전달 시 추천 질문 클릭 진입으로 분류되어 " +
+                    "FAQ 인입 클러스터링 입력에서 제외된다.")
     @PostMapping
-    public ResponseEntity<ChatSessionCreateResponse> createSession(@AuthenticationPrincipal Long userId) {
+    public ResponseEntity<ChatSessionCreateResponse> createSession(
+            @AuthenticationPrincipal Long userId,
+            @RequestBody(required = false) ChatSessionCreateRequest request) {
+        String sourceType = request == null ? null : request.sourceType();
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(chatSessionService.createSession(userId));
+                .body(chatSessionService.createSession(userId, sourceType));
     }
 
     @Operation(summary = "채팅 세션 목록 조회", description = "사용자의 채팅 세션 목록을 조회한다. 제목 키워드로 검색할 수 있다.")

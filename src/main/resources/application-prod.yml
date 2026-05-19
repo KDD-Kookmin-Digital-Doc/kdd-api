@@ -18,3 +18,9 @@ springdoc:
     enabled: false
   swagger-ui:
     enabled: false
+
+# 운영 환경에서만 FAQ 후보 스케줄러 활성화 (외부 AI 서버 호출 발생).
+faq:
+  candidate:
+    scheduler:
+      enabled: ${FAQ_CANDIDATE_SCHEDULER_ENABLED:true}

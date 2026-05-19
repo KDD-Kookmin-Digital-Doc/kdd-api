@@ -26,21 +26,23 @@ public class AdminFaqCandidateController {
     private final FaqCandidateService faqCandidateService;
 
     @Operation(summary = "FAQ 후보 목록 조회",
-            description = "BE 스케줄러가 생성한 FAQ 후보 목록을 페이지네이션으로 조회한다. 최신순 정렬. " +
+            description = "BE 스케줄러(FaqCandidateScheduler)가 인입한 FAQ 후보 목록을 page=0 기반 페이지네이션으로 조회한다. " +
                     "요구사항 4-(3)-1: 반려된 후보도 목록에서 제거되지 않으므로 기본은 PENDING/APPROVED/REJECTED 전체. " +
-                    "status=pending|approved|rejected 쿼리 파라미터로 단일 상태 필터링이 가능하다.")
+                    "status=pending|approved|rejected 쿼리 파라미터로 단일 상태 필터링이 가능하다. 최신순 정렬.")
     @GetMapping
     public ResponseEntity<PageResponse<FaqCandidateResponse>> getCandidates(
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        // status는 optional: null/빈값이면 전체 상태 반환, 알 수 없는 값이면 400.
+        // status는 optional: null이면 전체 상태, 빈/공백도 동일하게 전체로 취급.
         FaqCandidateStatus parsedStatus = FaqCandidateStatus.parseOrNull(status);
         return ResponseEntity.ok(faqCandidateService.getCandidates(parsedStatus, page, pageSize));
     }
 
     @Operation(summary = "FAQ 후보 승인",
-            description = "관리자가 카테고리를 지정해 FAQ 후보를 실제 FAQ로 등록한다. PENDING 상태만 가능.")
+            description = "관리자가 카테고리를 지정해 FAQ 후보를 실제 FAQ로 등록한다. PENDING 상태만 가능.\n" +
+                    "요청 body는 {\"topic\": \"academic\" | ... | \"other\"} 형식 — 요구사항 명세서의 " +
+                    "'관리자는 각 FAQ 후보에 대해 FAQ 카테고리를 지정할 수 있어야 한다' 항목 충족을 위해 body 필수.")
     @PostMapping("/{candidateId}/approve")
     public ResponseEntity<FaqResponse> approve(
             @PathVariable Long candidateId,
