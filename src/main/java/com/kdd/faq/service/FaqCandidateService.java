@@ -22,7 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -252,7 +254,22 @@ public class FaqCandidateService {
         if (limit < 1 || limit > MAX_RECOMMENDED_LIMIT) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
-        return faqCandidateRepository.findTopRecommended(PageRequest.of(0, limit));
+        // AI 인입 스케줄러가 매 주기마다 유사 클러스터를 별도 row로 적재할 수 있어 동일 question 텍스트가
+        // 추천 목록에 중복 노출될 수 있다. 사용자 노출 경로(/chat/recommended-questions)에서만 텍스트 기준
+        // 중복을 제거 — 관리자 목록(getCandidates)은 인입/분포 파악이 필요해 그대로 둔다.
+        // limit 상한이 20이라 fetchSize는 limit*3으로 잡아도 최대 60건이라 dedupe 누락 가능성은 사실상 없음.
+        int fetchSize = Math.min(MAX_RECOMMENDED_LIMIT * 3, limit * 3);
+        List<FaqCandidate> candidates = faqCandidateRepository.findTopRecommended(PageRequest.of(0, fetchSize));
+        Set<String> seenQuestions = new HashSet<>();
+        List<FaqCandidate> deduped = new ArrayList<>(limit);
+        for (FaqCandidate c : candidates) {
+            String key = c.getQuestion() == null ? "" : c.getQuestion().trim().toLowerCase();
+            if (seenQuestions.add(key)) {
+                deduped.add(c);
+                if (deduped.size() == limit) break;
+            }
+        }
+        return deduped;
     }
 
 }

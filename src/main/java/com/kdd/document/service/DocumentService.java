@@ -214,11 +214,15 @@ public class DocumentService {
 
     @Transactional
     public DocumentDetailPublicResponse getDocumentDetail(Long documentId, Long userId, boolean isAdmin) {
+        // 진입부에서 documentId 유효성 검증을 선행한다. insertIfAbsent는 document_id FK 제약이 걸려 있어
+        // 잘못된 id가 넘어오면 PG가 ConstraintViolationException을 던지고, 트랜잭션이 aborted 상태가 되어
+        // 후속 쿼리까지 모두 실패한다. 사전 fetch로 깔끔한 404를 돌려주고, 최종 응답도 같은 인스턴스를 재사용.
+        Document document = findCompletedDocumentOrThrow(documentId);
+
         // 관리자 조회는 view_count/document_views 추적에서 제외 — 명세 "관리자 및 테스트 계정의 이벤트는
         // 집계에서 제외" 정책 + popular 쿼리의 admin 필터(u.role <> 'admin')와 일관성 유지.
-        // 추적을 건너뛰어도 dedup 분기 이후의 findCompletedDocumentOrThrow는 그대로 실행되어 404 응답은 보장된다.
         if (isAdmin) {
-            return DocumentDetailPublicResponse.from(findCompletedDocumentOrThrow(documentId));
+            return DocumentDetailPublicResponse.from(document);
         }
 
         // 요구사항 3-(2)-5: 동일 사용자+문서 10분 내 중복 조회는 view_count 누적 및 이벤트 적재를 모두 스킵.
@@ -248,8 +252,7 @@ public class DocumentService {
             }
         }
 
-        // dedup으로 스킵된 경로에서도 문서가 여전히 노출 가능한 상태인지 확인해야 한다.
-        return DocumentDetailPublicResponse.from(findCompletedDocumentOrThrow(documentId));
+        return DocumentDetailPublicResponse.from(document);
     }
 
     @Transactional(readOnly = true)
