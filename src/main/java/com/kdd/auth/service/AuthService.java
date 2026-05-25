@@ -41,6 +41,9 @@ public class AuthService {
     @Value("${app.auth.allowed-domain}")
     private String allowedDomain;
 
+    @Value("${app.auth.allowed-emails:}")
+    private String allowedEmails;
+
     @Value("${app.auth.admin-emails:}")
     private String adminEmails;
 
@@ -118,9 +121,19 @@ public class AuthService {
     }
 
     private void validateDomain(String email) {
-        if (!email.endsWith("@" + allowedDomain)) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED_DOMAIN);
+        if (email.endsWith("@" + allowedDomain) || isAllowedEmail(email)) {
+            return;
         }
+        throw new BusinessException(ErrorCode.UNAUTHORIZED_DOMAIN);
+    }
+
+    private boolean isAllowedEmail(String email) {
+        if (allowedEmails == null || allowedEmails.isBlank()) {
+            return false;
+        }
+        return Arrays.stream(allowedEmails.split(","))
+                .map(String::trim)
+                .anyMatch(email::equalsIgnoreCase);
     }
 
     private User createUser(GoogleUserInfo userInfo) {

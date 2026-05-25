@@ -45,6 +45,8 @@ app:
     redirect-uri: ${GOOGLE_REDIRECT_URI}
   auth:
     allowed-domain: ${ALLOWED_DOMAIN:kookmin.ac.kr}
+    # 도메인 제한과 별개로 개별 허용할 외부 이메일 (콤마 구분). 체험용 외부 사용자에게 발급.
+    allowed-emails: ${ALLOWED_EMAILS:}
     admin-emails: ${DOC_ADMIN_EMAILS:}
     # revoke 직후 이 시간(ms) 이내에 동일 refresh token이 다시 들어오면 도난이 아닌
     # 동시 refresh race로 보고 reuse 판정에서 제외한다 (#76).
