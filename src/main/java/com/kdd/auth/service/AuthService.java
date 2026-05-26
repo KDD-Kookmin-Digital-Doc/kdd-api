@@ -24,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 
 @Slf4j
 @Service
@@ -121,19 +122,21 @@ public class AuthService {
     }
 
     private void validateDomain(String email) {
-        if (email.endsWith("@" + allowedDomain) || isAllowedEmail(email)) {
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+        String normalizedDomain = allowedDomain.trim().toLowerCase(Locale.ROOT);
+        if (normalizedEmail.endsWith("@" + normalizedDomain) || isAllowedEmail(normalizedEmail)) {
             return;
         }
         throw new BusinessException(ErrorCode.UNAUTHORIZED_DOMAIN);
     }
 
-    private boolean isAllowedEmail(String email) {
+    private boolean isAllowedEmail(String normalizedEmail) {
         if (allowedEmails == null || allowedEmails.isBlank()) {
             return false;
         }
         return Arrays.stream(allowedEmails.split(","))
-                .map(String::trim)
-                .anyMatch(email::equalsIgnoreCase);
+                .map(s -> s.trim().toLowerCase(Locale.ROOT))
+                .anyMatch(normalizedEmail::equals);
     }
 
     private User createUser(GoogleUserInfo userInfo) {
