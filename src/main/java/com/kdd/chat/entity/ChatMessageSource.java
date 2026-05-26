@@ -7,8 +7,6 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.BatchSize;
-
 @Entity
 @Table(name = "chat_message_sources", indexes = {
         @Index(name = "idx_chat_msg_src_message_id", columnList = "message_id"),
@@ -29,9 +27,10 @@ public class ChatMessageSource {
     @JoinColumn(name = "message_id", nullable = false)
     private ChatMessage message;
 
+    // Document lazy 로딩의 N+1 배치 페치는 Document 클래스 레벨 @BatchSize(100)으로 처리.
+    // Hibernate 6은 @BatchSize를 @ManyToOne 필드에 직접 못 붙임.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "document_id", nullable = false)
-    @BatchSize(size = 100)
     private Document document;
 
     @ManyToOne(fetch = FetchType.LAZY)
