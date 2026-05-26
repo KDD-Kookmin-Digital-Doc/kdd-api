@@ -39,7 +39,7 @@ public interface DocumentViewRepository extends JpaRepository<DocumentView, Long
                                 @Param("minutes") int minutes);
 
     /**
-     * V9 unique 인덱스(document_id, user_id, 10분 epoch 버킷) 기반의 race-safe INSERT.
+     * V9 unique 인덱스(document_id, user_id, 10분 date_bin 버킷) 기반의 race-safe INSERT.
      * <p>
      * read-then-write race(두 동시 요청이 모두 {@link #existsWithinWindow}에서 false를 본 뒤 INSERT) 시
      * Hibernate가 ConstraintViolationException을 던지면 PostgreSQL TX가 aborted 상태가 되어

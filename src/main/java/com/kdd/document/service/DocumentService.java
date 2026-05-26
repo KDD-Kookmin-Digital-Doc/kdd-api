@@ -232,7 +232,7 @@ public class DocumentService {
                 documentId, userId, VIEW_DEDUP_MINUTES);
 
         if (!withinDedupWindow) {
-            // V9의 (document_id, user_id, 10분 epoch 버킷) unique 인덱스 + ON CONFLICT DO NOTHING으로
+            // V9의 (document_id, user_id, 10분 date_bin 버킷) unique 인덱스 + ON CONFLICT DO NOTHING으로
             // read-then-write race를 DB 레벨에서 차단. 두 동시 요청이 모두 existsWithinWindow=false를 봐도
             // 실제 INSERT는 한 번만 성공하고, 두 번째 시도는 inserted=0을 받아 view_count 증가도 함께 건너뛴다.
             // ConstraintViolationException 캐치 대신 ON CONFLICT를 쓰는 이유: PG는 violation 발생 시 TX를
