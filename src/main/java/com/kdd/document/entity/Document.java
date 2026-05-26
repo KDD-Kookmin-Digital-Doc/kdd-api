@@ -5,11 +5,14 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
+// ChatMessageSource.document(@ManyToOne) lazy 로딩 시 N+1 방지용 배치 페치.
+// Hibernate 6은 @BatchSize를 @ManyToOne 필드에 직접 못 붙이므로 타깃 클래스 레벨로 옮김.
 @Entity
 @Table(name = "documents", indexes = {
         @Index(name = "idx_doc_category", columnList = "category_id"),
@@ -17,6 +20,7 @@ import java.time.LocalDateTime;
         @Index(name = "idx_doc_status", columnList = "status"),
         @Index(name = "idx_doc_published_at", columnList = "published_at")
 })
+@BatchSize(size = 100)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Document {
