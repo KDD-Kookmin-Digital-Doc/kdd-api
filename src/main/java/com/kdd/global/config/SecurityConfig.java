@@ -3,6 +3,7 @@ package com.kdd.global.config;
 import com.kdd.global.security.CustomAccessDeniedHandler;
 import com.kdd.global.security.CustomAuthenticationEntryPoint;
 import com.kdd.global.security.JwtAuthenticationFilter;
+import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -42,6 +43,9 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // ASYNC/ERROR dispatch에선 JwtAuthenticationFilter(OncePerRequestFilter 기본값)가 스킵되어
+                        // SecurityContext가 비어 AuthorizationFilter가 denied를 던지는 문제 회피 (#97).
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/auth/google", "/auth/refresh").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
