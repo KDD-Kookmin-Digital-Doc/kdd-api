@@ -19,12 +19,12 @@ public class UserContextBuilder {
     public String buildContext(User user) {
         // 프로필이 아직 등록되지 않은 사용자는 이름으로 폴백해 메시지 전송을 막지 않는다
         if (user.getUserType() == UserType.STUDENT) {
-            return studentProfileRepository.findById(user.getId())
+            return studentProfileRepository.findByUserId(user.getId())
                     .map(this::formatStudent)
                     .orElseGet(user::getName);
         }
 
-        return staffProfileRepository.findById(user.getId())
+        return staffProfileRepository.findByUserId(user.getId())
                 .map(this::formatStaff)
                 .orElseGet(user::getName);
     }
