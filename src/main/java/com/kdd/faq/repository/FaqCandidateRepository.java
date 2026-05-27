@@ -22,15 +22,16 @@ public interface FaqCandidateRepository extends JpaRepository<FaqCandidate, Long
     Page<FaqCandidate> findByStatus(FaqCandidateStatus status, Pageable pageable);
 
     /**
-     * 채팅 시작 전 추천 질문 노출용 — 가장 최근 인입된 PENDING 후보를 frequency 내림차순으로 N개 반환.
+     * 채팅 시작 전 추천 질문 노출용 — 관리자가 승인한 APPROVED 후보를 frequency 내림차순으로 N개 반환.
      * 명세서 §"채팅 시작 전 추천 질문 조회"의 "TOP 5" 데이터 소스로 동일 후보 row를 재사용한다
      * (별도 캐시 테이블 없이 단일 source of truth 유지).
+     * PENDING은 관리자 미검토 상태이므로 사용자에게 노출하지 않는다 — 검토를 거친 APPROVED만 추천 후보.
      * frequency가 동일하면 최신 createdAt 우선 — 같은 인입 주기 내 동률 시 인입 순서 유지.
      */
     @Query("""
             select c
             from FaqCandidate c
-            where c.status = com.kdd.faq.entity.FaqCandidateStatus.PENDING
+            where c.status = com.kdd.faq.entity.FaqCandidateStatus.APPROVED
             order by c.frequency desc, c.createdAt desc, c.id desc
             """)
     List<FaqCandidate> findTopRecommended(Pageable pageable);
