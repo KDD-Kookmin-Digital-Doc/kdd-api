@@ -8,7 +8,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,15 +18,13 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 회원가입 플로우 재테스트용 본인 프로필 리셋 컨트롤러.
  * <p>
- * {@code @Profile("!prod")} 가드로 운영 프로파일(prod)에서는 빈으로 등록되지 않아 컨트롤러 자체가 사라진다 —
- * 운영 admin이 실수/악의로 호출해 본인 프로필을 손실하는 경로를 컴파일·기동 시점부터 차단한다.
- * 로컬/개발/스테이징(dev, local, stage)에서만 활성화된다.
+ * 운영 포함 전 프로파일에서 활성화되며, ADMIN 권한 + {@code confirm=RESET-MY-PROFILE} 토큰 + "본인 행만 삭제" 범위로
+ * 오·악의 호출을 막는다. 운영 admin이 실제 운영 DB에서 회원가입 플로우를 재테스트하는 용도.
  */
-@Tag(name = "Admin - Test", description = "관리자 테스트 전용 API (회원가입 플로우 재테스트 등). 운영(prod)에서는 비활성화.")
+@Tag(name = "Admin - Test", description = "관리자 테스트 전용 API (회원가입 플로우 재테스트 등).")
 @RestController
 @RequestMapping("/admin/test")
 @RequiredArgsConstructor
-@Profile("!prod")
 public class AdminTestController {
 
     private static final String RESET_PROFILE_CONFIRM_TOKEN = "RESET-MY-PROFILE";
